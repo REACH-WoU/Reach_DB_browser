@@ -385,7 +385,120 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   # )
   
   
+  ################################ Geoview part ################################
   
+  observeEvent(input$project_id, {
+    project_rounds <- projects_data %>% 
+      filter(project_id == input$project_id) %>% 
+      pull(round)
+    
+    updateSelectizeInput(session, "round", choices = project_rounds)
+  })
   
+  observeEvent(input$round, {
+    project_types <- projects_data %>% 
+      filter(project_id == input$project_id,
+             round == input$round) %>% 
+      pull(survey_type)
+    
+    updateSelectizeInput(session, "survey_type", choices = project_types)
+  })
+  
+  observeEvent(input$check_representation_levels, {
+
+    if (!is.null(input$project_id) & !is.null(input$round) & !is.null(input$survey_type)) {
+      
+      updateSelectizeInput(session, "representation_level", choices = c())
+      
+      representation_levels <- projects_data %>% 
+        filter(project_id == input$project_id,
+               round == input$round,
+               survey_type == input$survey_type) %>% 
+        dplyr::select(oblast, raion, hromada, settlement)
+      
+      if (nrow(representation_levels) > 1) {
+        1
+      }
+      representative_choices <- c()
+      if (!is.na(representation_levels$oblast[1]) & representation_levels$oblast[1] != "") {
+        representative_choices <- c(representative_choices, "oblast")
+      }
+      
+      if (!is.na(representation_levels$raion[1]) & representation_levels$raion[1] != "") {
+        representative_choices <- c(representative_choices, "raion")
+      }
+      
+      if (!is.na(representation_levels$hromada[1]) & representation_levels$hromada[1] != "") {
+        representative_choices <- c(representative_choices, "hromada")
+      }
+      
+      if (!is.na(representation_levels$settlement[1]) & representation_levels$settlement[1] != "") {
+        representative_choices <- c(representative_choices, "settlement")
+      }
+      
+      if (length(representative_choices) == 0) {
+        updateSelectizeInput(session, "representation_level", choices = c("No representative levels"))
+      } else {
+        updateSelectizeInput(session, "representation_level", choices = representative_choices)
+      }
+    }
+
+  })
+  
+  observeEvent(input$draw_map, {
+    if (!is.null(input$representation_level)) {
+      
+      if (input$representation_level == "No representative levels") {
+        output$map <- renderLeaflet({
+          leaflet() %>%
+            addProviderTiles(providers$CartoDB.Positron) %>%
+            setView(lng = 31.1656, lat = 48.3794, zoom = 6) %>%
+            addLabelOnlyMarkers(
+              lng = 31.1656, lat = 48.3794, 
+              label = "NO DATA", 
+              labelOptions = labelOptions(
+                noHide = TRUE, 
+                direction = 'top', 
+                textOnly = TRUE,
+                style = list(
+                  "color" = "red", 
+                  "font-size" = "16px",
+                  "font-weight" = "bold"
+                )
+              )
+            )
+        })
+        return()
+      }
+      
+      geodata <- projects_data %>% 
+        dplyr::filter(project_id == input$project_id,
+               round == input$round,
+               survey_type == input$survey_type) %>%
+        pull(!!sym(input$representation_level)) %>%
+        strsplit(";") %>%
+        unlist()
+      
+      if (input$representation_level == "oblast") {
+        map_data <- oblast_json %>%
+          dplyr::filter(ADM1_PCODE %in% geodata)
+      } else if (input$representation_level == "raion") {
+        map_data <- raion_json %>%
+          filter(ADM2_PCODE %in% geodata)
+      } else if (input$representation_level == "hromada") {
+        map_data <- hromada_json %>%
+          filter(ADM3_PCODE %in% geodata)
+      } else if (input$representation_level == "settlement") {
+        map_data <- settlement_json %>%
+          filter(ADM4_PCODE %in% geodata)
+      }
+      
+      output$map <- renderLeaflet({
+        req(map_data)
+        mapview(map_data)@map
+      })
+      
+    }
+  })
   
 }

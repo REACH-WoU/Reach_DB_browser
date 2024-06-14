@@ -66,6 +66,21 @@ ui <- fluidPage(
                  width = 10
                )
              )
+    ),
+    tabPanel('Geoview',
+             sidebarLayout(
+               sidebarPanel(
+                 selectizeInput("project_id", "Select project_id:", choices = projects_data$project_id, multiple = FALSE),
+                 selectizeInput("round", "Select round:", choices = c(), multiple = FALSE),
+                 selectizeInput("survey_type", "Select survey_type:", choices = c(), multiple = FALSE),
+                 actionButton("check_representation_levels", "Check representation levels"),
+                 selectizeInput("representation_level", "Select representation level:", choices = c(), multiple = FALSE),
+                 actionButton("draw_map", "Draw representation level map"),
+               ),
+               mainPanel(
+                 leafletOutput("map")
+               )
+             )
     )
   )
   

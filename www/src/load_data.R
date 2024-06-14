@@ -52,4 +52,25 @@ rep_table <- rep_table %>%
          representative_at = ifelse(representative_at=="",'none',representative_at))
 
 
+############## load projects, rounds and survey types and geodata ##############
+
+# create sf dataframe with 1 point in Kiyv and lable "No Data"
+
+oblast_json <- st_read("www/geodata/Oblasts.geojson")
+raion_json <- st_read("www/geodata/Raions.json")
+hromada_json <- st_read("www/geodata/Hromadas.json")
+settlement_json <- st_read("www/geodata/Settlements.json")
+
+query <- "SELECT * FROM [dbo].[representative_columns_table];"
+
+projects_data <- dbGetQuery(my_connection, query)
+
+# split TABLE_ID with '_", extract project_id, round and survey_type as first, second and third element
+
+projects_data <- projects_data %>%
+  dplyr::mutate(
+    project_id = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 1),
+    round = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 2),
+    survey_type = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 3))
+
 
