@@ -49,6 +49,7 @@ server <- function(input, output, session) {
   
   datasetInput <- reactiveVal(NULL)
   Dat <- reactiveVal(NULL)
+  processed_data <- reactiveVal(NULL)
   
   # # Reactive expression to fetch the selected project
   observeEvent(input$process,{
@@ -286,103 +287,33 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     removeModal()
 
+    processed_data(df)
+    
+    showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
+                     type = 'message')
     
   })
   
-  # output$excel <- downloadHandler(
-  #   filename = function() {
-  #     paste("data", Sys.Date(), ".xlsx", sep = "")
-  #   },
-  #   content = function(file) {
-  #     excel_frame <-datasetInput()
-  #     # Create a workbook
-  #     wb <- createWorkbook()
-  #     
-  #     # Add a worksheet
-  #     addWorksheet(wb, "Data")
-  #     
-  #     if(input$table_type == 'Multiple comparison'){
-  #       old_names <- names(excel_frame)
-  #       new_row <- gsub("\\_set_.*","",old_names)
-  #       excel_frame <- rbind(new_row,excel_frame)
-  #       
-  #       new_names <- gsub(".*\\_set_","",old_names)
-  #       names(excel_frame) <- new_names
-  #     }else{
-  #       excel_frame <- excel_frame %>% select(-any_of(c('true_ID')))
-  #     }
-  #     
-  #     # Write data to the worksheet
-  #     writeData(wb, "Data", x = excel_frame, startCol = 1, startRow = 1, rowNames = FALSE)
-  #     
-  #     # create a new style for this thing
-  #     custom_style <- createStyle(wrapText =TRUE)
-  #     grey_rows <- createStyle(fgFill = 'lightgrey',wrapText =TRUE,border ='TopBottom')
-  #     white_rows <- createStyle(fgFill = 'white',wrapText =TRUE,border ='TopBottom')
-  #     
-  #     
-  #     addStyle(wb, sheet = "Data", custom_style, rows = 1:(nrow(excel_frame)+1), 
-  #              cols = 1:ncol(excel_frame), gridExpand = TRUE)
-  #     
-  #     if(input$table_type == 'Single comparison'){
-  #       true_id_list <- unique(excel_frame$true_ID)
-  #       true_id_even <- true_id_list[seq(1, length(true_id_list), 2)]
-  #       rows_to_format <- which(excel_frame$true_ID %in% true_id_even)+1
-  #       
-  #       addStyle(wb, sheet = "Data", grey_rows, rows = rows_to_format, 
-  #                cols = 1:ncol(excel_frame), gridExpand = TRUE)
-  #     }else{
-  #       ind_beginnings <- which(grepl('sector',excel_frame[1,]))
-  #       ind_endings <- which(grepl('russian_choices',excel_frame[1,]))
-  #       
-  #       ind_beginnings <- ind_beginnings[seq(1,length(ind_beginnings),2)]
-  #       ind_endings <- ind_endings[seq(1,length(ind_endings),2)]
-  #       
-  #       columns_to_format <- lapply(1:length(ind_beginnings),function(x){ind_beginnings[x]:ind_endings[x]}) %>% 
-  #         unlist()
-  #       
-  #       columns_to_format2 <- setdiff(1:ncol(excel_frame),columns_to_format)
-  #       
-  #       addStyle(wb, sheet = "Data", grey_rows, rows = 1:(nrow(excel_frame)+1), 
-  #                cols = columns_to_format, gridExpand = TRUE)
-  #       
-  #       addStyle(wb, sheet = "Data", white_rows, rows = 1:(nrow(excel_frame)+1), 
-  #                cols = columns_to_format2, gridExpand = TRUE)
-  #       
-  #       # merge the cells with identical TABLE_ID
-  #       ls_names <- unique(names(excel_frame))
-  #       
-  #       centered_style_grey <- createStyle(halign = "center", valign = "center",fgFill = 'lightgrey')
-  #       centered_style_white <- createStyle(halign = "center", valign = "center",fgFill = 'white')
-  #       
-  #       for(name in ls_names){
-  #         range <- which(names(excel_frame) %in% name)
-  #         mergeCells(wb, "Data", cols = range, rows = 1)
-  #         if(all(range %in% columns_to_format)){
-  #           addStyle(wb, sheet = "Data", style = centered_style_grey,
-  #                    cols = range, rows = 1, gridExpand = TRUE)
-  #         }else{
-  #           addStyle(wb, sheet = "Data", style = centered_style_white,
-  #                    cols = range, rows = 1, gridExpand = TRUE)
-  #         }
-  #       }
-  #     }
-  #     
-  #     border_style <- createStyle(border ='Left')
-  #     
-  #     addStyle(wb, sheet = "Data", border_style, rows = 1:(nrow(excel_frame)+1), 
-  #              cols = ncol(excel_frame)+1, gridExpand = TRUE)
-  #     
-  #     setColWidths(wb,'Data',1:ncol(excel_frame),widths =30)
-  #     
-  #     # Write merged data to the worksheet
-  #     writeData(wb, "Data", excel_frame,
-  #               startCol = 1, startRow = 1, rowNames = FALSE)
-  #     
-  #     # Save the workbook
-  #     saveWorkbook(wb, file)
-  #   }
-  # )
+  output$excel <- downloadHandler(
+    filename = function() {
+      paste("data", Sys.Date(), ".xlsx", sep = "")
+    },
+    content = function(file) {
+      
+      excel_frame <-processed_data()
+      # Create a workbook
+      wb <- createWorkbook()
+      
+      # Add a worksheet
+      addWorksheet(wb, "Data")
+      
+      # Write data to the worksheet
+      writeData(wb, "Data", x = excel_frame, startCol = 1, startRow = 1, rowNames = FALSE)
+      
+      # Save the workbook
+      saveWorkbook(wb, file)
+    }
+  )
   
   
   ################################ Geoview part ################################

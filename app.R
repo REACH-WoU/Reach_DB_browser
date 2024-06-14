@@ -1,3 +1,4 @@
+library(purrr)
 library(httr)
 library(data.table)
 library(DT)
