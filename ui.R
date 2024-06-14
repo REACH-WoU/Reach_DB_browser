@@ -54,6 +54,7 @@ ui <- fluidPage(
                  div(style = "height: 10px;"),
                  actionButton("process", "Build table"),
                  div(style = "height: 10px;"),
+                 uiOutput('button2'),
                  # downloadButton("excel", "Download Excel"),
                  width =2
                ),

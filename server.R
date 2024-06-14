@@ -1,44 +1,40 @@
+unlist_with_na <- function(x) {
+  if (is.null(x)) {
+    return(NA)
+  } else {
+    return(unlist(x))
+  }
+}
+
+js <- c(
+  "$('[id^=checkb]').on('click', function(){",
+  "  var id = this.getAttribute('id');",
+  "  var i = parseInt(/checkb(\\d+)/.exec(id)[1]);",
+  "  var value = $(this).prop('checked');",
+  "  var info = [{row: i, col: 16, value: value}];",
+  "  Shiny.setInputValue('dtable_cell_edit:DT.cellInfo', info);",
+  "})"
+)
+
+
+shinyInput <- function(FUN, len, id, ...) {
+  inputs <- character(len)
+  for (i in seq_len(len)) {
+    inputs[i] <- as.character(FUN(paste0(id, i), label = NULL, ...))
+  }
+  inputs
+}
+
+
 server <- function(input, output, session) {
   # ----------------------------readme -------------------------------------------------
   
-  # output$text_row1 <- renderText({
-  #   'This app allows the user to browse the questionnaire bank of the Reach Database. The user can select
-  #   different projects to view or view the entirety of the database. The pages also allow for different 
-  #   types of view of the matching tables, if that was desired.
-  #   The tables that are produced by this programme are browseable. Each table has a filter pane on the top.
-  #   The user can filter the output table by the question of interest, variable type and type of survey that
-  #   was conducted among others. The user can  also download the resulting table as an Excel file if they
-  #   click the `Download Excel button`
-  #   <br>
-  #   <br>'
-  # })
+  # output$text_row1 <- renderText({})
   # 
   # 
-  # output$text_column1 <- renderText({
-  #   '<strong>Single comparison.</strong><br>
-  #   This page allows the user to select the project of interest and browse the database for
-  #   all of the questions that match the questions of the selected project. For example, selecting UKR2308
-  #   will show the user all of the questions that match between UKR2308 and the rest of our questionnaires.
-  #   The user can select multiple projects or leave the field blank to view the entire database.
-  #   <br>
-  #   <strong>Multiple comparison.</strong><br>
-  #   To use this capability of the browser the user has to select 2 or more projects in the dropdown menu.
-  #   Selecting this type of view will build a wide table for the matching questions of the selected projects.
-  #   Each row will represent a question with it\'s details (question type, sector, survey_type, etc.) with
-  #   columns being grouped by the projects where the question in the row has a match.
-  #   '
-  # })
+  # output$text_column1 <- renderText({})
   # 
-  # # Render text in the second column
-  # output$text_column2 <- renderText({
-  #   '<strong>General information.</strong><br>
-  #   This page allows the user to view all of the matching questions that match across multiple rounds
-  #   within a project. So, if the question `a` was asked in rounds 1,3,10 of the project, the user will
-  #   be able to see this. If there are multiple types of surveying within the project, the user will have to
-  #   specify exactly what kind of survey they\'d like to browse (e.g. Household survey vs Key informant survey
-  #   under the same project ID).The matching questions are color coded for easy browsing.
-  #   '
-  # })
+  # output$text_column2 <- renderText({})
   
   # ---------------------------the requests page --------------------------------
   
@@ -52,20 +48,12 @@ server <- function(input, output, session) {
   
   
   datasetInput <- reactiveVal(NULL)
-  
+  Dat <- reactiveVal(NULL)
   
   # # Reactive expression to fetch the selected project
   observeEvent(input$process,{
     req(input$questions)
     
-    showModal(
-      modalDialog(
-        title = "Processing",
-        "Fetching your request from the DB.",
-        footer = NULL,
-        easyClose = TRUE
-      )
-    )
     questions<- input$questions
     
     get_true_IDs <- unique_table %>% 
@@ -102,11 +90,16 @@ server <- function(input, output, session) {
                 ) %>%
                 mutate(name = str_squish(name))) %>% 
       left_join(rep_table) %>% 
-      select(project_ID,sector,TABLE_ID,english_question,ukrainian_question,russian_question,representative_at,oblast,
-             month_conducted)
+      select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,english_question,ukrainian_question,russian_question,representative_at,oblast,
+             month_conducted,name)
     
     removeModal()
-    datasetInput(df_choices_added)
+    
+    datasetInput(
+      cbind(df_choices_added, check = shinyInput(checkboxInput, nrow(df_choices_added), "checkb")
+      ))
+    
+    Dat(cbind(df_choices_added, bool = FALSE))  
     
   })
   
@@ -117,28 +110,182 @@ server <- function(input, output, session) {
     if(is.null(df)){
       return(NULL)
     }else{
-      
       tbl <- datatable(
         df,
         filter = "top",
         class = list(stripe = FALSE),
+        escape = FALSE,
+        editable = list(target = "cell", disable = list(columns = 16)),
+        selection = "none",
+        callback = JS(js),
         options = list(
           dom = 'lfrtipB',
           pageLength = 100,
           columnDefs = list(
-            list(targets = "_all", width = '15px',
-                 targets = "oblast", width = '30px')  # Adjust the width as needed
+            list(targets = "_all", width = '15px')
+            ,
+            list(visible=FALSE, targets=(which(names(df)%in% c('survey_type','round_ID',
+                                                               'TABLE_ID','list_name','datasheet','name'))-1)
+            )
           )),
         rownames = FALSE,
       )
       
-      
-      
       return(tbl)
       
-      
-      
     }
+    
+  }, server = FALSE)
+  
+  observeEvent(input$dtable_cell_edit, { 
+    info <- input$dtable_cell_edit # this input contains the info of the edit
+    
+    dato <- Dat() # read the frame
+    dato$bool <- as.character(dato$bool)# convert to character (no warnings this way)
+    Dat(editData(dato, info))# update the reactive
+    
+    # if(any(Dat()$bool)){
+    output$button2 <- renderUI({
+      actionButton("process_request", "Send the request to the server")
+    })
+    # }
+    
+  })
+  
+  observeEvent(input$process_request,{
+    
+
+    output$table <- NULL
+    selected_frame <- Dat()
+    
+    selected_frame <- selected_frame %>% filter(bool =='TRUE')
+    
+    rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet,representative_columns from data_representative_table")
+    rep_table_overview_geo <- rep_table_overview %>% 
+      mutate(representative_columns=ifelse(representative_columns=='None','Overall',representative_columns)) %>% 
+      select(TABLE_ID,representative_columns)
+    
+    rep_table_overview_sheets_dict <- rep_table_overview %>% 
+      separate_rows(datasheet_names ,sep =';') %>% 
+      mutate(datasheet_name_tool = ifelse(datasheet_names==main_datasheet,'main',datasheet_names)) %>% 
+      select(TABLE_ID,datasheet_names,datasheet_name_tool)
+    
+    
+    general_info <- selected_frame %>% 
+      select(TABLE_ID,project_ID,round_ID,survey_type,month_conducted) %>% 
+      distinct() %>% 
+      left_join(rep_table_overview_sheets_dict %>% 
+                  filter(datasheet_name_tool=='main') %>% 
+                  mutate(main_sheet_name = paste0('data_',TABLE_ID,'_',datasheet_names,'_DCMPR'))) %>% 
+      select(-c(datasheet_names ,datasheet_name_tool))
+    
+    # get the weights info
+    weight_table <-  dbGetQuery(my_connection , paste0(
+      "SELECT TABLE_NAME, COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="','")  ,"')"))
+    
+    weight_table <- weight_table %>% 
+      filter(grepl('weight',COLUMN_NAME)) %>% 
+      rename(main_sheet_name =TABLE_NAME,
+             weight_column_name = COLUMN_NAME)
+    
+    if(nrow(weight_table)>0){
+      general_info <- general_info %>% 
+        left_join(weight_table)
+    }else{
+      general_info$weight_column_name <- NA
+    }
+    
+    
+    DAF_disaggs <- database_project %>% 
+      mutate(TABLE_ID = paste0(project_ID,'_R',round_ID,'_',survey_type)) %>% 
+      filter(TABLE_ID %in% unique(selected_frame$TABLE_ID),
+             datasheet=='main',
+             true_ID %in% c('226218a1-ae1a-4fb9-8419-888707dd20da','5e44e6ff-f9f9-4a8a-9d32-636bd51554db',
+                            '94dfa0b4-902e-4a9c-9c30-4b4ff25637c0')) %>% 
+      select(name,TABLE_ID)
+    
+    DAF_disaggs_full <- rbind(DAF_disaggs, DAF_disaggs %>% mutate(name=NA))
+    
+    DAF_template <- selected_frame %>% 
+      left_join(
+        rep_table_overview_geo %>% 
+          mutate(representative_columns = ifelse(representative_columns!='Overall',
+                                                 paste0(representative_columns,';','Overall'),
+                                                 'Overall'))
+      ) %>% 
+      separate_rows(representative_columns,sep =';') %>% 
+      left_join(DAF_disaggs_full %>% rename(disaggregations=name),relationship = "many-to-many") %>% 
+      rename(admin = representative_columns,
+             variable_label = english_question) %>% 
+      mutate(disaggregations_label = ifelse(is.na(disaggregations),'Overall',disaggregations)) %>% 
+      group_by(TABLE_ID) %>% 
+      mutate(n_ = 1,
+             ID = cumsum(n_)) %>% 
+      select(-n_) %>% 
+      ungroup() %>% 
+      mutate(calculation = NA,
+             func = ifelse(q.type %in% c('decimal','integer'),'numeric',q.type),
+             join = NA) %>% 
+      select(TABLE_ID,ID, name,variable_label,calculation,func,admin,
+             disaggregations,disaggregations_label,join, q.type, datasheet) %>% 
+      left_join(rep_table_overview_sheets_dict %>% rename(datasheet=datasheet_name_tool)) %>% 
+      rename(variable = name) %>% 
+      mutate(DB_table_name = paste0('data_',TABLE_ID,'_',datasheet_names,'_DCMPR')) %>% 
+      select(-datasheet_names) 
+    
+    
+    removeModal()
+    showModal(
+      modalDialog(
+        title = "Processing",
+        "Sending your request to the processing system.",
+        footer = NULL,
+        easyClose = TRUE
+      )
+    )
+
+    DAF_template<-DAF_template
+    general_info<-general_info
+    
+    DAF_template[is.na(DAF_template$calculation),]$calculation <- 'empty'
+    general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
+    
+    # write.xlsx(DAF_template,'DAF_template.xlsx')
+    # write.xlsx(general_info,'general_info.xlsx')
+
+    
+    
+    json_body <- list(
+      daf_file = DAF_template,
+      info = general_info
+    )
+    
+    url <- Sys.getenv('url')
+    
+    response <- POST(url, body = json_body, encode = "json")
+    print(status_code(response))
+    
+    char <- rawToChar(response$content)
+    df <- fromJSON(char)
+    
+    df_final <- as.data.frame(do.call(cbind,df$result))
+    
+    # Convert the list to a dataframe 
+    df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
+
+    df <- df %>% 
+      left_join(DAF_template %>% 
+                  select(ID, TABLE_ID, variable, admin,disaggregations) %>% 
+                  rename(variable_orig = variable,
+                         admin_orig = admin,
+                         disaggregations_orig = disaggregations)) %>% 
+      left_join(general_info %>% select(TABLE_ID,month_conducted))
+    
+    
+    removeModal()
+
     
   })
   
