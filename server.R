@@ -289,6 +289,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
 
     processed_data(df)
     
+    projects <- unique(df$TABLE_ID)
+    updateSelectizeInput(session, "project", choices = projects, selected = NULL)
+    updateSelectizeInput(session, "project_numeric", choices = projects, selected = NULL)
+    
     showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
                      type = 'message')
     
@@ -300,7 +304,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     },
     content = function(file) {
       
-      excel_frame <-processed_data()
+      excel_frame <- processed_data()
       # Create a workbook
       wb <- createWorkbook()
       
@@ -318,118 +322,305 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   ################################ Geoview part ################################
   
-  observeEvent(input$project_id, {
-    project_rounds <- projects_data %>% 
-      filter(project_id == input$project_id) %>% 
-      pull(round)
-    
-    updateSelectizeInput(session, "round", choices = project_rounds)
-  })
-  
-  observeEvent(input$round, {
-    project_types <- projects_data %>% 
-      filter(project_id == input$project_id,
-             round == input$round) %>% 
-      pull(survey_type)
-    
-    updateSelectizeInput(session, "survey_type", choices = project_types)
-  })
-  
-  observeEvent(input$check_representation_levels, {
-
-    if (!is.null(input$project_id) & !is.null(input$round) & !is.null(input$survey_type)) {
+  observeEvent(input$project, {
+    if (!is.null(input$project) & !is.null(processed_data())) {
       
-      updateSelectizeInput(session, "representation_level", choices = c())
+      filtered_df <- processed_data() %>% filter(TABLE_ID == input$project)
       
-      representation_levels <- projects_data %>% 
-        filter(project_id == input$project_id,
-               round == input$round,
-               survey_type == input$survey_type) %>% 
-        dplyr::select(oblast, raion, hromada, settlement)
+      variables <- unique(filtered_df$variable_orig)
       
-      if (nrow(representation_levels) > 1) {
-        1
-      }
-      representative_choices <- c()
-      if (!is.na(representation_levels$oblast[1]) & representation_levels$oblast[1] != "") {
-        representative_choices <- c(representative_choices, "oblast")
-      }
-      
-      if (!is.na(representation_levels$raion[1]) & representation_levels$raion[1] != "") {
-        representative_choices <- c(representative_choices, "raion")
-      }
-      
-      if (!is.na(representation_levels$hromada[1]) & representation_levels$hromada[1] != "") {
-        representative_choices <- c(representative_choices, "hromada")
-      }
-      
-      if (!is.na(representation_levels$settlement[1]) & representation_levels$settlement[1] != "") {
-        representative_choices <- c(representative_choices, "settlement")
-      }
-      
-      if (length(representative_choices) == 0) {
-        updateSelectizeInput(session, "representation_level", choices = c("No representative levels"))
-      } else {
-        updateSelectizeInput(session, "representation_level", choices = representative_choices)
-      }
+      updateSelectizeInput(session, "variable_orig", choices = variables)
     }
-
+    
   })
   
-  observeEvent(input$draw_map, {
-    if (!is.null(input$representation_level)) {
+  observeEvent(input$variable_orig, {
+    if (!is.null(input$variable_orig) & !is.null(processed_data())) {
       
-      if (input$representation_level == "No representative levels") {
-        output$map <- renderLeaflet({
-          leaflet() %>%
-            addProviderTiles(providers$CartoDB.Positron) %>%
-            setView(lng = 31.1656, lat = 48.3794, zoom = 6) %>%
-            addLabelOnlyMarkers(
-              lng = 31.1656, lat = 48.3794, 
-              label = "NO DATA", 
-              labelOptions = labelOptions(
-                noHide = TRUE, 
-                direction = 'top', 
-                textOnly = TRUE,
-                style = list(
-                  "color" = "red", 
-                  "font-size" = "16px",
-                  "font-weight" = "bold"
-                )
-              )
-            )
+      filtered_df <- processed_data() %>% filter(TABLE_ID == input$project & variable_orig == input$variable_orig)
+      
+      options <- unique(filtered_df$option)
+      
+      updateSelectizeInput(session, "option", choices = options)
+    }
+    
+  })
+  
+  observeEvent(input$option, {
+    if (!is.null(input$option) & !is.null(processed_data())) {
+      
+      filtered_df <- processed_data() %>%
+        filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_1 == " Overall" & option == input$option)
+
+      #### oblast plot
+      
+      oblast_map <- filtered_df %>%
+        inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
+      
+      oblast_map <- st_as_sf(oblast_map)
+      
+      #### raion plot
+      raion_map <- filtered_df %>%
+        inner_join(raion_json, by = c("admin_category_orig" = "ADM2_PCODE"))
+      
+      raion_map <- st_as_sf(raion_map)
+      
+      #### hromada plot
+      hromada_map <- filtered_df %>%
+        inner_join(hromada_json, by = c("admin_category_orig" = "ADM3_PCODE"))
+      
+      hromada_map <- st_as_sf(hromada_map)
+      
+      if (nrow(oblast_map) > 0) {
+        output$map_oblast <- renderLeaflet({
+          req(oblast_map)
+          mapview(oblast_map, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                           "OpenStreetMap",
+                                                           "Esri.WorldImagery",
+                                                           "OpenTopoMap"))@map
         })
-        return()
       }
       
-      geodata <- projects_data %>% 
-        dplyr::filter(project_id == input$project_id,
-               round == input$round,
-               survey_type == input$survey_type) %>%
-        pull(!!sym(input$representation_level)) %>%
-        strsplit(";") %>%
-        unlist()
-      
-      if (input$representation_level == "oblast") {
-        map_data <- oblast_json %>%
-          dplyr::filter(ADM1_PCODE %in% geodata)
-      } else if (input$representation_level == "raion") {
-        map_data <- raion_json %>%
-          filter(ADM2_PCODE %in% geodata)
-      } else if (input$representation_level == "hromada") {
-        map_data <- hromada_json %>%
-          filter(ADM3_PCODE %in% geodata)
-      } else if (input$representation_level == "settlement") {
-        map_data <- settlement_json %>%
-          filter(ADM4_PCODE %in% geodata)
+      if (nrow(raion_map) > 0) {
+        output$map_raion <- renderLeaflet({
+          req(raion_map)
+          mapview(raion_map, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                          "OpenStreetMap",
+                                                          "Esri.WorldImagery",
+                                                          "OpenTopoMap"))@map
+        })
       }
       
-      output$map <- renderLeaflet({
-        req(map_data)
-        mapview(map_data)@map
-      })
+      if (nrow(hromada_map) > 0) {
+        output$map_hromada <- renderLeaflet({
+          req(hromada_map)
+          mapview(hromada_map, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                            "OpenStreetMap",
+                                                            "Esri.WorldImagery",
+                                                            "OpenTopoMap"))@map
+        })
+      }
       
     }
+    
+    ##### numeric
+    
+    observeEvent(input$project_numeric, {
+      if (!is.null(input$project_numeric) & !is.null(processed_data())) {
+        
+        filtered_df <- processed_data() %>% filter(TABLE_ID == input$project_numeric)
+        
+        variables <- unique(filtered_df$variable_orig)
+        
+        updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
+      }
+      
+    })
+    
+    observeEvent(input$variable_orig_numeric, {
+      if (!is.null(input$variable_orig_numeric) & !is.null(processed_data())) {
+        
+        filtered_df <- processed_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
+        
+        options <- unique(filtered_df$option)
+        
+        updateSelectizeInput(session, "option_numeric", choices = options)
+      }
+      
+    })
+    
   })
+  
+  observeEvent(input$option_numeric, {
+    if (!is.null(input$option_numeric) & !is.null(processed_data())) {
+      
+      filtered_df <- processed_data() %>%
+        filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & disaggregations_1 == " Overall" & option == input$option_numeric)
+
+      #### oblast plot
+      
+      oblast_map_numeric <- filtered_df %>%
+        inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
+      
+      oblast_map_numeric <- st_as_sf(oblast_map_numeric)
+      
+      #### raion plot
+      raion_map_numeric <- filtered_df %>%
+        inner_join(raion_json, by = c("admin_category_orig" = "ADM2_PCODE"))
+      
+      raion_map_numeric <- st_as_sf(raion_map_numeric)
+      
+      #### hromada plot
+      hromada_map_numeric <- filtered_df %>%
+        inner_join(hromada_json, by = c("admin_category_orig" = "ADM3_PCODE"))
+      
+      hromada_map_numeric <- st_as_sf(hromada_map_numeric)
+      
+      if (nrow(oblast_map_numeric) > 0) {
+        output$map_oblast_numeric <- renderLeaflet({
+          req(oblast_map_numeric)
+          mapview(oblast_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                           "OpenStreetMap",
+                                                           "Esri.WorldImagery",
+                                                           "OpenTopoMap"))@map
+        })
+      }
+      
+      if (nrow(raion_map_numeric) > 0) {
+        output$map_raion_numeric <- renderLeaflet({
+          req(raion_map_numeric)
+          mapview(raion_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                          "OpenStreetMap",
+                                                          "Esri.WorldImagery",
+                                                          "OpenTopoMap"))@map
+        })
+      }
+      
+      if (nrow(hromada_map_numeric) > 0) {
+        output$map_hromada_numeric <- renderLeaflet({
+          req(hromada_map_numeric)
+          mapview(hromada_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+                                                            "OpenStreetMap",
+                                                            "Esri.WorldImagery",
+                                                            "OpenTopoMap"))@map
+        })
+      }
+    }
+      
+  })
+  
+  # observeEvent(input$project_id, {
+  #   project_rounds <- projects_data %>% 
+  #     filter(project_id == input$project_id) %>% 
+  #     pull(round)
+  #   
+  #   updateSelectizeInput(session, "round", choices = project_rounds)
+  # })
+  # 
+  # observeEvent(input$round, {
+  #   project_types <- projects_data %>% 
+  #     filter(project_id == input$project_id,
+  #            round == input$round) %>% 
+  #     pull(survey_type)
+  #   
+  #   updateSelectizeInput(session, "survey_type", choices = project_types)
+  # })
+  # 
+  # observeEvent(input$check_representation_levels, {
+  # 
+  #   if (!is.null(input$project_id) & !is.null(input$round) & !is.null(input$survey_type)) {
+  #     
+  #     updateSelectizeInput(session, "representation_level", choices = c())
+  #     
+  #     representation_levels <- projects_data %>% 
+  #       filter(project_id == input$project_id,
+  #              round == input$round,
+  #              survey_type == input$survey_type) %>% 
+  #       dplyr::select(oblast, raion, hromada, settlement)
+  #     
+  #     if (nrow(representation_levels) > 1) {
+  #       1
+  #     }
+  #     representative_choices <- c()
+  #     if (!is.na(representation_levels$oblast[1]) & representation_levels$oblast[1] != "") {
+  #       representative_choices <- c(representative_choices, "oblast")
+  #     }
+  #     
+  #     if (!is.na(representation_levels$raion[1]) & representation_levels$raion[1] != "") {
+  #       representative_choices <- c(representative_choices, "raion")
+  #     }
+  #     
+  #     if (!is.na(representation_levels$hromada[1]) & representation_levels$hromada[1] != "") {
+  #       representative_choices <- c(representative_choices, "hromada")
+  #     }
+  #     
+  #     if (!is.na(representation_levels$settlement[1]) & representation_levels$settlement[1] != "") {
+  #       representative_choices <- c(representative_choices, "settlement")
+  #     }
+  #     
+  #     if (length(representative_choices) == 0) {
+  #       updateSelectizeInput(session, "representation_level", choices = c("No representative levels"))
+  #     } else {
+  #       updateSelectizeInput(session, "representation_level", choices = representative_choices)
+  #     }
+  #   }
+  # 
+  # })
+  # 
+  # observeEvent(input$draw_map, {
+  #   if (!is.null(input$representation_level)) {
+  #     
+  #     if (input$representation_level == "No representative levels") {
+  #       output$map <- renderLeaflet({
+  #         leaflet() %>%
+  #           addProviderTiles(providers$CartoDB.Positron) %>%
+  #           setView(lng = 31.1656, lat = 48.3794, zoom = 6) %>%
+  #           addLabelOnlyMarkers(
+  #             lng = 31.1656, lat = 48.3794, 
+  #             label = "NO DATA", 
+  #             labelOptions = labelOptions(
+  #               noHide = TRUE, 
+  #               direction = 'top', 
+  #               textOnly = TRUE,
+  #               style = list(
+  #                 "color" = "red", 
+  #                 "font-size" = "16px",
+  #                 "font-weight" = "bold"
+  #               )
+  #             )
+  #           )
+  #       })
+  #       return()
+  #     }
+  #     
+  #     geodata <- projects_data %>% 
+  #       dplyr::filter(project_id == input$project_id,
+  #              round == input$round,
+  #              survey_type == input$survey_type) %>%
+  #       pull(!!sym(input$representation_level)) %>%
+  #       strsplit(";") %>%
+  #       unlist()
+  #     
+  #     if (input$representation_level == "oblast") {
+        # map_data <- oblast_json %>%
+        #   dplyr::filter(ADM1_PCODE %in% geodata)
+  #     } else if (input$representation_level == "raion") {
+  #       map_data <- raion_json %>%
+  #         filter(ADM2_PCODE %in% geodata)
+  #     } else if (input$representation_level == "hromada") {
+  #       map_data <- hromada_json %>%
+  #         filter(ADM3_PCODE %in% geodata)
+  #     } else if (input$representation_level == "settlement") {
+  #       map_data <- settlement_json %>%
+  #         filter(ADM4_PCODE %in% geodata)
+  #     }
+  #     
+      # output$map <- renderLeaflet({
+      #   req(map_data)
+      #   mapview(map_data)@map
+      # })
+  #     
+  #   }
+  # })
+  # 
+  # observeEvent(input$addMaps, {
+  #   output$mapsUI <- renderUI({
+  #     numMaps <- input$numMaps
+  #     map_outputs <- lapply(1:numMaps, function(i) {
+  #       leafletOutput(paste0("map", i))
+  #     })
+  #     do.call(tagList, map_outputs)
+  #   })
+  #   
+  #   lapply(1:input$numMaps, function(i) {
+  #     output[[paste0("map", i)]] <- renderLeaflet({
+  #       leaflet() %>%
+  #         addTiles() %>%
+  #         setView(lng = -93.65, lat = 42.0285, zoom = 4)
+  #     })
+  #   })
+  # })
   
 }
+
+

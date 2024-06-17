@@ -21,18 +21,17 @@ exec sp_executesql @sql
          value = format(value, "%Y-%m"))
 
 
-database_project <- dbGetQuery(my_connection , "SELECT * from Reach_QDB")
+database_project <- dbGetQuery(my_connection , "SELECT * from Reach_QDB;")
+print(unique(database_project$project_ID))
 
 unique_table <- database_project %>% 
   filter(paste0(project_ID,'_R',round_ID,'_',survey_type) %in% time_tbl$TABLE_ID) %>% 
   select(database_label_clean,true_ID) %>% 
   distinct()
 
-unique_questions <- unique(unique_table$database_label_clean)
+tool_survey <- dbGetQuery(my_connection , "SELECT * from Survey_DB;")
 
-tool_survey <- dbGetQuery(my_connection , "SELECT * from Survey_DB")
-
-rep_table <-  dbGetQuery(my_connection , "SELECT * from representative_columns_table")
+rep_table <-  dbGetQuery(my_connection , "SELECT * from representative_columns_table;")
 
 rep_table$representative_at <- apply(rep_table[,c("oblast","raion","hromada","settlement")], 1, 
                  function(i) paste(colnames(rep_table[,c("oblast","raion","hromada","settlement")])[ !is.na(i) ], collapse = ","))
@@ -59,7 +58,6 @@ rep_table <- rep_table %>%
 oblast_json <- st_read("www/geodata/Oblasts.geojson")
 raion_json <- st_read("www/geodata/Raions.json")
 hromada_json <- st_read("www/geodata/Hromadas.json")
-settlement_json <- st_read("www/geodata/Settlements.json")
 
 query <- "SELECT * FROM [dbo].[representative_columns_table];"
 

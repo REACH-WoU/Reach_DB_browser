@@ -43,7 +43,6 @@ ui <- fluidPage(
     tabPanel('Database request',
              # Sidebar layout with input and output definitions
              sidebarLayout(
-               # Sidebar panel for inputs
                sidebarPanel(
                  selectizeInput("questions",
                                 "Select an option:",
@@ -57,29 +56,41 @@ ui <- fluidPage(
                  uiOutput('button2'),
                  div(style = "height: 10px;"),
                  downloadButton("excel", "Download Excel"),
-                 width =2
+                 conditionalPanel(
+                   condition = "input.process_request",
+                   selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
+                   selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
+                   selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
+                 ),
+                 width = 2
                ),
                
                # Main panel for displaying outputs
                mainPanel(
                  # Output: DataTable
                  DTOutput("table"),
+                 # uiOutput("mapsUI"),
+                 leafletOutput("map_oblast"),
+                 leafletOutput("map_raion"),
+                 leafletOutput("map_hromada"),
                  width = 10
                )
              )
     ),
-    tabPanel('Geoview',
+    tabPanel('Numeric',
              sidebarLayout(
                sidebarPanel(
-                 selectizeInput("project_id", "Select project_id:", choices = projects_data$project_id, multiple = FALSE),
-                 selectizeInput("round", "Select round:", choices = c(), multiple = FALSE),
-                 selectizeInput("survey_type", "Select survey_type:", choices = c(), multiple = FALSE),
-                 actionButton("check_representation_levels", "Check representation levels"),
-                 selectizeInput("representation_level", "Select representation level:", choices = c(), multiple = FALSE),
-                 actionButton("draw_map", "Draw representation level map"),
+                 conditionalPanel(
+                   condition = "input.process_request",
+                   selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
+                   selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
+                   selectizeInput("option_numeric", "Select option:", choices = c(), multiple = FALSE),
+                 ),
                ),
                mainPanel(
-                 leafletOutput("map")
+                 leafletOutput("map_oblast_numeric"),
+                 leafletOutput("map_raion_numeric"),
+                 leafletOutput("map_hromada_numeric"),
                )
              )
     )
