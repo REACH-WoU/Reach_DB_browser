@@ -78,6 +78,8 @@ ui <- fluidPage(
                    
                    # Main panel for displaying outputs
                    mainPanel(
+                     echarts4rOutput("perc_pie_chart"),
+                     div(style = "height: 30px;"),
                      leafletOutput("map_oblast"),
                      div(style = "height: 30px;"),
                      leafletOutput("map_raion"),

@@ -158,19 +158,19 @@ server <- function(input, output, session) {
   observeEvent(input$process_request,{
     
 
-    output$table <- NULL
+    # output$table <- NULL
     selected_frame <- Dat()
     
     selected_frame <- selected_frame %>% filter(bool =='TRUE')
     
     rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet,representative_columns from data_representative_table")
     rep_table_overview_geo <- rep_table_overview %>% 
-      mutate(representative_columns=ifelse(representative_columns=='None','Overall',representative_columns)) %>% 
+      mutate(representative_columns=ifelse(representative_columns == 'None','Overall',representative_columns)) %>% 
       select(TABLE_ID,representative_columns)
     
     rep_table_overview_sheets_dict <- rep_table_overview %>% 
       separate_rows(datasheet_names ,sep =';') %>% 
-      mutate(datasheet_name_tool = ifelse(datasheet_names==main_datasheet,'main',datasheet_names)) %>% 
+      mutate(datasheet_name_tool = ifelse(datasheet_names == main_datasheet,'main',datasheet_names)) %>% 
       select(TABLE_ID,datasheet_names,datasheet_name_tool)
     
     
@@ -289,8 +289,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     
     removeModal()
-  
-    write.xlsx(df, 'data.xlsx')
     processed_data(df)
     
     if ("mean" %in% colnames(df)) {
@@ -386,6 +384,35 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       filtered_df <- select_data() %>% filter(TABLE_ID == input$project & variable_orig == input$variable_orig)
       
+      overall_admin_data <- filtered_df %>%
+        filter(admin == "Overall" & disaggregations_1 == " Overall")
+      
+      # output$perc_pie_chart <- renderUI({
+      #   amPieChart(
+      #     data = overall_admin_data,
+      #     category = "option",
+      #     value = "perc",
+      #     variableDepth = TRUE
+      #   )
+      # })
+      
+      output$perc_pie_chart <- renderEcharts4r({
+        overall_admin_data %>%
+          e_charts(option) %>%
+          e_pie(perc, 
+                label = list(
+                  show = TRUE,
+                  formatter = "{b}: {d}%"
+                ),
+                tooltip = list(
+                  trigger = 'item',
+                  formatter = "{a} <br/>{b}: {c} ({d}%)"
+                )
+          ) %>%
+          e_title("Overall Pie Chart") %>%
+          e_tooltip()
+      })
+      
       options <- unique(filtered_df$option)
       
       updateSelectizeInput(session, "option", choices = options)
@@ -398,7 +425,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       filtered_df <- select_data() %>%
         filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_1 == " Overall" & option == input$option)
-
+      
       #### oblast plot
       
       oblast_map <- filtered_df %>%
