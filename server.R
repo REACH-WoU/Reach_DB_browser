@@ -50,6 +50,8 @@ server <- function(input, output, session) {
   datasetInput <- reactiveVal(NULL)
   Dat <- reactiveVal(NULL)
   processed_data <- reactiveVal(NULL)
+  numeric_data <- reactiveVal(NULL)
+  select_data <- reactiveVal(NULL)
   
   # # Reactive expression to fetch the selected project
   observeEvent(input$process,{
@@ -250,13 +252,14 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     DAF_template<-DAF_template
     general_info<-general_info
     
+    # save DAF_template and general_info as xlsx
+    
     DAF_template[is.na(DAF_template$calculation),]$calculation <- 'empty'
     general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
+    DAF_template[is.na(DAF_template$disaggregations),]$disaggregations <- 'empty'
     
     # write.xlsx(DAF_template,'DAF_template.xlsx')
     # write.xlsx(general_info,'general_info.xlsx')
-
-    
     
     json_body <- list(
       daf_file = DAF_template,
@@ -286,12 +289,56 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     
     removeModal()
-
+  
+    write.xlsx(df, 'data.xlsx')
     processed_data(df)
     
-    projects <- unique(df$TABLE_ID)
-    updateSelectizeInput(session, "project", choices = projects, selected = NULL)
-    updateSelectizeInput(session, "project_numeric", choices = projects, selected = NULL)
+    if ("mean" %in% colnames(df)) {
+      print("mean")
+      numeric <- df %>%
+        filter(!is.na(mean))
+    } else {
+      numeric <- data.frame(
+        TABLE_ID = character(),
+        ID = numeric(),
+        variable = character(),
+        admin = character(),
+        disaggregations = character(),
+        variable_orig = character(),
+        disaggregations_category_1 = character(),
+        option = character(),
+        admin_category_orig = character()
+      )
+    }
+    
+    if ("perc" %in% colnames(df)) {
+      print("perc")
+      select <- df %>%
+        filter(!is.na(perc))
+    } else {
+      select <- data.frame(
+        TABLE_ID = character(),
+        ID = numeric(),
+        variable = character(),
+        admin = character(),
+        disaggregations = character(),
+        variable_orig = character(),
+        disaggregations_1 = character(),
+        option = character(),
+        admin_category_orig = character()
+      )
+    }
+    
+    
+    numeric_data(numeric)
+    select_data(select)
+    
+    projects_numeric <- unique(numeric$TABLE_ID)
+    projects_select <- unique(select$TABLE_ID)
+    print(projects_select)
+    
+    updateSelectizeInput(session, "project", choices = projects_select, selected = NULL)
+    updateSelectizeInput(session, "project_numeric", choices = projects_numeric, selected = NULL)
     
     showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
                      type = 'message')
@@ -323,9 +370,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   ################################ Geoview part ################################
   
   observeEvent(input$project, {
-    if (!is.null(input$project) & !is.null(processed_data())) {
+    if (!is.null(input$project) & !is.null(select_data())) {
       
-      filtered_df <- processed_data() %>% filter(TABLE_ID == input$project)
+      filtered_df <- select_data() %>% filter(TABLE_ID == input$project)
       
       variables <- unique(filtered_df$variable_orig)
       
@@ -335,9 +382,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   observeEvent(input$variable_orig, {
-    if (!is.null(input$variable_orig) & !is.null(processed_data())) {
+    if (!is.null(input$variable_orig) & !is.null(select_data())) {
       
-      filtered_df <- processed_data() %>% filter(TABLE_ID == input$project & variable_orig == input$variable_orig)
+      filtered_df <- select_data() %>% filter(TABLE_ID == input$project & variable_orig == input$variable_orig)
       
       options <- unique(filtered_df$option)
       
@@ -347,9 +394,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   observeEvent(input$option, {
-    if (!is.null(input$option) & !is.null(processed_data())) {
+    if (!is.null(input$option) & !is.null(select_data())) {
       
-      filtered_df <- processed_data() %>%
+      filtered_df <- select_data() %>%
         filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_1 == " Overall" & option == input$option)
 
       #### oblast plot
@@ -406,9 +453,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     ##### numeric
     
     observeEvent(input$project_numeric, {
-      if (!is.null(input$project_numeric) & !is.null(processed_data())) {
+      if (!is.null(input$project_numeric) & !is.null(numeric_data())) {
         
-        filtered_df <- processed_data() %>% filter(TABLE_ID == input$project_numeric)
+        filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
         
         variables <- unique(filtered_df$variable_orig)
         
@@ -418,11 +465,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
     
     observeEvent(input$variable_orig_numeric, {
-      if (!is.null(input$variable_orig_numeric) & !is.null(processed_data())) {
+      if (!is.null(input$variable_orig_numeric) & !is.null(numeric_data())) {
         
-        filtered_df <- processed_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
+        filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
         
-        options <- unique(filtered_df$option)
+        options <- c("mean", "min", "max", "median")
         
         updateSelectizeInput(session, "option_numeric", choices = options)
       }
@@ -432,10 +479,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   observeEvent(input$option_numeric, {
-    if (!is.null(input$option_numeric) & !is.null(processed_data())) {
+    if (!is.null(input$option_numeric) & !is.null(numeric_data())) {
       
-      filtered_df <- processed_data() %>%
-        filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & disaggregations_1 == " Overall" & option == input$option_numeric)
+      filtered_df <- numeric_data() %>%
+        filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & disaggregations_category_1 == " Overall")
 
       #### oblast plot
       
@@ -459,7 +506,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       if (nrow(oblast_map_numeric) > 0) {
         output$map_oblast_numeric <- renderLeaflet({
           req(oblast_map_numeric)
-          mapview(oblast_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+          mapview(oblast_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
                                                            "OpenStreetMap",
                                                            "Esri.WorldImagery",
                                                            "OpenTopoMap"))@map
@@ -469,7 +516,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       if (nrow(raion_map_numeric) > 0) {
         output$map_raion_numeric <- renderLeaflet({
           req(raion_map_numeric)
-          mapview(raion_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+          mapview(raion_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
                                                           "OpenStreetMap",
                                                           "Esri.WorldImagery",
                                                           "OpenTopoMap"))@map
@@ -479,7 +526,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       if (nrow(hromada_map_numeric) > 0) {
         output$map_hromada_numeric <- renderLeaflet({
           req(hromada_map_numeric)
-          mapview(hromada_map_numeric, zcol = "perc", map.types = c("CartoDB.Positron",
+          mapview(hromada_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
                                                             "OpenStreetMap",
                                                             "Esri.WorldImagery",
                                                             "OpenTopoMap"))@map

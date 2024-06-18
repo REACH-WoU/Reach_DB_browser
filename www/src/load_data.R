@@ -29,6 +29,8 @@ unique_table <- database_project %>%
   select(database_label_clean,true_ID) %>% 
   distinct()
 
+unique_questions <- unique(unique_table$database_label_clean)
+
 tool_survey <- dbGetQuery(my_connection , "SELECT * from Survey_DB;")
 
 rep_table <-  dbGetQuery(my_connection , "SELECT * from representative_columns_table;")

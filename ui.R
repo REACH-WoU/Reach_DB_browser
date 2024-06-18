@@ -56,26 +56,36 @@ ui <- fluidPage(
                  uiOutput('button2'),
                  div(style = "height: 10px;"),
                  downloadButton("excel", "Download Excel"),
-                 conditionalPanel(
-                   condition = "input.process_request",
-                   selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
-                   selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
-                   selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
-                 ),
                  width = 2
                ),
                
-               # Main panel for displaying outputs
                mainPanel(
-                 # Output: DataTable
-                 DTOutput("table"),
-                 # uiOutput("mapsUI"),
-                 leafletOutput("map_oblast"),
-                 leafletOutput("map_raion"),
-                 leafletOutput("map_hromada"),
-                 width = 10
+                 DTOutput("table")
                )
              )
+    ),
+    tabPanel('Select',
+             sidebarLayout(
+               sidebarPanel(
+                 conditionalPanel(
+                       condition = "input.process_request",
+                       selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
+                       selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
+                       selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
+                     ),
+                     width = 2
+                   ),
+                   
+                   # Main panel for displaying outputs
+                   mainPanel(
+                     leafletOutput("map_oblast"),
+                     div(style = "height: 30px;"),
+                     leafletOutput("map_raion"),
+                     div(style = "height: 30px;"),
+                     leafletOutput("map_hromada"),
+                     width = 10
+                   )
+                 )
     ),
     tabPanel('Numeric',
              sidebarLayout(
@@ -85,12 +95,16 @@ ui <- fluidPage(
                    selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
                    selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
                    selectizeInput("option_numeric", "Select option:", choices = c(), multiple = FALSE),
+                   
                  ),
+                 width = 2
                ),
                mainPanel(
                  leafletOutput("map_oblast_numeric"),
+                 div(style = "height: 30px;"),
                  leafletOutput("map_raion_numeric"),
-                 leafletOutput("map_hromada_numeric"),
+                 div(style = "height: 30px;"),
+                 leafletOutput("map_hromada_numeric")
                )
              )
     )
