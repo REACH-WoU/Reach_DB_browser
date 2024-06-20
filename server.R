@@ -157,7 +157,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$process_request,{
     
-
+    
     # output$table <- NULL
     selected_frame <- Dat()
     
@@ -248,14 +248,16 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         easyClose = TRUE
       )
     )
-
+    
     DAF_template<-DAF_template
     general_info<-general_info
     
     # save DAF_template and general_info as xlsx
     
     DAF_template[is.na(DAF_template$calculation),]$calculation <- 'empty'
-    general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
+    if(nrow(general_info[is.na(general_info$weight_column_name),])>0){
+      general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
+    }
     DAF_template[is.na(DAF_template$disaggregations),]$disaggregations <- 'empty'
     
     # write.xlsx(DAF_template,'DAF_template.xlsx')
@@ -278,7 +280,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     # Convert the list to a dataframe 
     df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
-
+    
     df <- df %>% 
       left_join(DAF_template %>% 
                   select(ID, TABLE_ID, variable, admin,disaggregations) %>% 
@@ -290,6 +292,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     removeModal()
     processed_data(df)
+    
+    
     
     if ("mean" %in% colnames(df)) {
       print("mean")
@@ -313,6 +317,25 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       print("perc")
       select <- df %>%
         filter(!is.na(perc))
+      
+      full_frame <- select %>%
+        select(variable,option,option_orig,TABLE_ID) %>%
+        distinct() %>%
+        full_join(select %>% 
+                    select(variable,variable_orig,
+                           month_conducted,TABLE_ID,
+                           admin,admin_orig,admin_category,admin_category_orig,
+                           full_count, total_count_perc) %>% 
+                    distinct())
+      
+      select <- select %>%
+        right_join(full_frame) %>% 
+        mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
+                        'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
+               across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x)),
+               disaggregations_orig=ifelse(is.na(disaggregations_orig),'empty',disaggregations_orig))
+      
+      
     } else {
       select <- data.frame(
         TABLE_ID = character(),
@@ -330,6 +353,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     numeric_data(numeric)
     select_data(select)
+    
     
     projects_numeric <- unique(numeric$TABLE_ID)
     projects_select <- unique(select$TABLE_ID)
@@ -375,6 +399,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       variables <- unique(filtered_df$variable_orig)
       
       updateSelectizeInput(session, "variable_orig", choices = variables)
+      updateSelectizeInput(session, "variable_orig_m", choices = variables, selected = variables[1])
+      
     }
     
   })
@@ -382,49 +408,124 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   observeEvent(input$variable_orig, {
     if (!is.null(input$variable_orig) & !is.null(select_data())) {
       
-      filtered_df <- select_data() %>% filter(TABLE_ID == input$project & variable_orig == input$variable_orig)
+      data_processed <- select_data()
+      
+      filtered_df <<- data_processed %>%
+        filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
+               perc>0)
+      
       
       overall_admin_data <- filtered_df %>%
-        filter(admin == "Overall" & disaggregations_1 == " Overall")
-      
-      # output$perc_pie_chart <- renderUI({
-      #   amPieChart(
-      #     data = overall_admin_data,
-      #     category = "option",
-      #     value = "perc",
-      #     variableDepth = TRUE
-      #   )
-      # })
-      
-      output$perc_pie_chart <- renderEcharts4r({
-        overall_admin_data %>%
-          e_charts(option) %>%
-          e_pie(perc, 
-                label = list(
-                  show = TRUE,
-                  formatter = "{b}: {d}%"
-                ),
-                tooltip = list(
-                  trigger = 'item',
-                  formatter = "{a} <br/>{b}: {c} ({d}%)"
-                )
-          ) %>%
-          e_title("Overall Pie Chart") %>%
-          e_tooltip()
-      })
+        filter(admin == "Overall" & disaggregations_category_1 == " Overall")
       
       options <- unique(filtered_df$option)
       
       updateSelectizeInput(session, "option", choices = options)
+      
+      
+      # basic chart
+      
+      total_cnt <- round(sum(overall_admin_data$perc),0)
+      title <- unique(overall_admin_data$variable)
+      
+      
+      output$graph_1_select <- renderPlotly({
+        if(total_cnt==0){
+          graph_1 <- plot_ly(overall_admin_data, labels = ~option, values = ~weighted_count, type = 'pie', hole = 0.6) %>%
+            layout(title = list(text = paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   showlegend = TRUE)
+          
+        }else{
+          graph_1 <- plot_ly(overall_admin_data, x = ~perc*100, y = ~option,  type = 'bar',
+                             text = ~paste0(round(perc*100,1),'%'),
+                             textposition = 'outside') %>%
+            layout(title = list(text=paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   xaxis = list(ticksuffix = "%",title = "", range = c(0,110)),
+                   yaxis = list(title = ""))
+        }
+        return(graph_1)
+      })
+      
+      
+      
+      # disaggregation graph
+      overall_disaggregation_data <- filtered_df %>%
+        filter(admin == "Overall" & disaggregations_category_1 != " Overall")
+      
+      title <- paste0(unique(overall_disaggregation_data$variable),'<br>')
+      
+      output$graph_2_select <- renderPlotly({
+        plot_ly(overall_disaggregation_data, x = ~perc*100, y = ~option, color = ~disaggregations_category_1, type = 'bar',
+                text = ~paste0(round(perc*100,1),'%'),
+                textposition = 'outside') %>%
+          layout(title = list(text=paste0("<b>",title ,"</b>"),
+                              font = list(color = '#000080', size = 16)),
+                 xaxis = list(ticksuffix = "%",title = "", range = c(0,110)),
+                 yaxis = list(title = ""))
+      })
+      
     }
     
   })
+  
+  
+  observeEvent(input$variable_orig_m,{
+    if(!is.null(input$variable_orig_m) & !is.null(select_data())){
+      
+      data_processed <- select_data()
+      
+      # timeline graph
+      graph_base3 <- data_processed %>% 
+        filter(variable_orig %in% input$variable_orig_m,
+               disaggregations_category_1 %in% ' Overall',
+               admin %in% 'Overall',
+               perc>0) %>% 
+        rowwise() %>% 
+        mutate(variable =paste(strwrap(variable, width = 35), collapse = "<br>"),
+               period_full = paste(month_conducted,TABLE_ID,variable,sep = '<br>'))
+      
+      cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc) %>% round(.,0)
+      title <- paste0(unique(graph_base3$variable),'<br>')
+      
+      
+      output$graph_3_select <- renderPlotly({
+        if(all(cnts==1)){
+          
+          plot_ly(graph_base3, x = ~period_full, y = ~perc*100 , color = ~option, type = 'bar',
+                  text = ~paste0(round(perc*100,1),'%'),
+                  textposition = 'outside',
+                  textfont =  list(size = 12,color = 'black')) %>%
+            layout(barmode = 'stack', 
+                   title = list(text=paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   legend = list(x = 0, y = -0.2),
+                   xaxis = list(title = ""),
+                   yaxis = list(ticksuffix = "%",title = ""))
+        }else{
+          plot_ly(graph_base3, x = ~period_full, y = ~perc*100 , color = ~option, type = 'bar',
+                  text = ~paste0(round(perc*100,1),'%'),
+                  textposition = 'outside',
+                  textfont =  list(size = 12,color = 'black')) %>%
+            layout(title = list(text=paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   legend = list(x = 0, y = -0.2),
+                   xaxis = list(title = ""),
+                   yaxis = list(ticksuffix = "%",title = ""))
+          
+        }
+      }) 
+      
+    }
+  })
+  
   
   observeEvent(input$option, {
     if (!is.null(input$option) & !is.null(select_data())) {
       
       filtered_df <- select_data() %>%
-        filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_1 == " Overall" & option == input$option)
+        filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 == " Overall" & option == input$option)
       
       #### oblast plot
       
@@ -487,6 +588,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         variables <- unique(filtered_df$variable_orig)
         
         updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
+        updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables, selected = variables[1])
+        
       }
       
     })
@@ -505,63 +608,150 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
   })
   
-  observeEvent(input$option_numeric, {
-    if (!is.null(input$option_numeric) & !is.null(numeric_data())) {
-      
-      filtered_df <- numeric_data() %>%
-        filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & disaggregations_category_1 == " Overall")
-
-      #### oblast plot
-      
-      oblast_map_numeric <- filtered_df %>%
-        inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
-      
-      oblast_map_numeric <- st_as_sf(oblast_map_numeric)
-      
-      #### raion plot
-      raion_map_numeric <- filtered_df %>%
-        inner_join(raion_json, by = c("admin_category_orig" = "ADM2_PCODE"))
-      
-      raion_map_numeric <- st_as_sf(raion_map_numeric)
-      
-      #### hromada plot
-      hromada_map_numeric <- filtered_df %>%
-        inner_join(hromada_json, by = c("admin_category_orig" = "ADM3_PCODE"))
-      
-      hromada_map_numeric <- st_as_sf(hromada_map_numeric)
-      
-      if (nrow(oblast_map_numeric) > 0) {
-        output$map_oblast_numeric <- renderLeaflet({
-          req(oblast_map_numeric)
-          mapview(oblast_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                           "OpenStreetMap",
-                                                           "Esri.WorldImagery",
-                                                           "OpenTopoMap"))@map
+  
+  
+  observeEvent(ignoreInit = TRUE, list(
+    input$variable_orig_numeric,
+    input$option_numeric), {
+      if (!is.null(input$option_numeric) & !is.null(numeric_data()) & input$option_numeric!='') {
+        
+        processed_numerics <- numeric_data()
+        
+        filtered_df <- processed_numerics %>%
+          filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
+                   disaggregations_category_1 == " Overall")
+        
+        
+        # basic stats
+        basic_stat_number <- filtered_df %>% 
+          filter(admin_category==' Overall') %>% 
+          pull(!!sym(input$option_numeric))
+        
+        
+        output$numeric_text_1 <- renderText({paste0(
+          unique(filtered_df$variable),
+          '<br>',input$option_numeric,' of ',round(basic_stat_number,2)
+        )
         })
+        
+        # disaggregation graph
+        graph_base_n2 <- processed_numerics %>% 
+          filter(variable_orig %in% input$variable_orig_numeric,
+                 admin %in% 'Overall',
+                 TABLE_ID %in% input$project_numeric) %>% 
+          rowwise() %>% 
+          mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
+                 vis_variable  = !!sym(input$option_numeric))
+        
+        title <- unique(graph_base_n2$variable)
+        
+        check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), ' Overall')
+        
+        if(length(check_categories)>0){
+          graph_base_n2 <- graph_base_n2 %>% 
+            filter(!disaggregations_category_1 %in% ' Overall',)
+        }
+        
+        output$graph_1_numeric <- renderPlotly({
+          plot_ly(graph_base_n2, x = ~vis_variable, y = ~variable, color = ~disaggregations_category_1, type = 'bar',
+                  text = ~round(vis_variable,1),
+                  textposition = 'outside') %>%
+            layout(title = list(text=paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   xaxis = list(title = ""),
+                   yaxis = list(title = ""))
+        })
+        
+        
+        #### oblast plot
+        
+        oblast_map_numeric <- filtered_df %>%
+          inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
+        
+        oblast_map_numeric <- st_as_sf(oblast_map_numeric)
+        
+        #### raion plot
+        raion_map_numeric <- filtered_df %>%
+          inner_join(raion_json, by = c("admin_category_orig" = "ADM2_PCODE"))
+        
+        raion_map_numeric <- st_as_sf(raion_map_numeric)
+        
+        #### hromada plot
+        hromada_map_numeric <- filtered_df %>%
+          inner_join(hromada_json, by = c("admin_category_orig" = "ADM3_PCODE"))
+        
+        hromada_map_numeric <- st_as_sf(hromada_map_numeric)
+        
+        if (nrow(oblast_map_numeric) > 0) {
+          output$map_oblast_numeric <- renderLeaflet({
+            req(oblast_map_numeric)
+            mapview(oblast_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
+                                                                                   "OpenStreetMap",
+                                                                                   "Esri.WorldImagery",
+                                                                                   "OpenTopoMap"))@map
+          })
+        }
+        
+        if (nrow(raion_map_numeric) > 0) {
+          output$map_raion_numeric <- renderLeaflet({
+            req(raion_map_numeric)
+            mapview(raion_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
+                                                                                  "OpenStreetMap",
+                                                                                  "Esri.WorldImagery",
+                                                                                  "OpenTopoMap"))@map
+          })
+        }
+        
+        if (nrow(hromada_map_numeric) > 0) {
+          output$map_hromada_numeric <- renderLeaflet({
+            req(hromada_map_numeric)
+            mapview(hromada_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
+                                                                                    "OpenStreetMap",
+                                                                                    "Esri.WorldImagery",
+                                                                                    "OpenTopoMap"))@map
+          })
+        }
       }
       
-      if (nrow(raion_map_numeric) > 0) {
-        output$map_raion_numeric <- renderLeaflet({
-          req(raion_map_numeric)
-          mapview(raion_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                          "OpenStreetMap",
-                                                          "Esri.WorldImagery",
-                                                          "OpenTopoMap"))@map
+    })
+  
+  
+  observeEvent(ignoreInit = TRUE, list(
+    input$variable_orig_m_numeric,
+    input$option_numeric),{
+      if(!is.null(input$variable_orig_m_numeric) & !is.null(numeric_data()) & input$option_numeric!=""){
+        
+        processed_numerics <- numeric_data()
+        
+        # timeline graph
+        graph_base3 <- processed_numerics %>% 
+          filter(variable_orig %in% input$variable_orig_m_numeric,
+                 disaggregations_category_1 %in% ' Overall',
+                 admin %in% 'Overall')%>% 
+          rowwise() %>% 
+          mutate(variable =paste(strwrap(variable, width = 35), collapse = "<br>"),
+                 period_full = paste(month_conducted,TABLE_ID,variable,sep = '<br>'),
+                 viz_variable = !!sym(input$option_numeric))
+        
+        title <- paste0(unique(graph_base3$variable),'<br>')
+        
+        
+        output$graph_2_numeric <- renderPlotly({
+          plot_ly(graph_base3, x = ~period_full, y = ~viz_variable , type = 'bar',
+                  text = ~round(viz_variable,1),
+                  textposition = 'outside',
+                  textfont =  list(size = 12,color = 'black')) %>%
+            layout(title = list(text=paste0("<b>",title ,"</b>"),
+                                font = list(color = '#000080', size = 16)),
+                   legend = list(x = 0, y = -0.2),
+                   xaxis = list(title = ""),
+                   yaxis = list(title = ""))
+          
         })
+        
       }
-      
-      if (nrow(hromada_map_numeric) > 0) {
-        output$map_hromada_numeric <- renderLeaflet({
-          req(hromada_map_numeric)
-          mapview(hromada_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                            "OpenStreetMap",
-                                                            "Esri.WorldImagery",
-                                                            "OpenTopoMap"))@map
-        })
-      }
-    }
-      
-  })
+    })
+  
   
   # observeEvent(input$project_id, {
   #   project_rounds <- projects_data %>% 
@@ -656,8 +846,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   #       unlist()
   #     
   #     if (input$representation_level == "oblast") {
-        # map_data <- oblast_json %>%
-        #   dplyr::filter(ADM1_PCODE %in% geodata)
+  # map_data <- oblast_json %>%
+  #   dplyr::filter(ADM1_PCODE %in% geodata)
   #     } else if (input$representation_level == "raion") {
   #       map_data <- raion_json %>%
   #         filter(ADM2_PCODE %in% geodata)
@@ -669,10 +859,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   #         filter(ADM4_PCODE %in% geodata)
   #     }
   #     
-      # output$map <- renderLeaflet({
-      #   req(map_data)
-      #   mapview(map_data)@map
-      # })
+  # output$map <- renderLeaflet({
+  #   req(map_data)
+  #   mapview(map_data)@map
+  # })
   #     
   #   }
   # })

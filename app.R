@@ -10,8 +10,8 @@ library(jsonlite)
 library(mapview)
 library(sf)
 library(leaflet)
-library(rAmCharts4)
-library(echarts4r)
+library(plotly)
+
 
 source('www/src/get_db.R')
 source('www/src/load_data.R')

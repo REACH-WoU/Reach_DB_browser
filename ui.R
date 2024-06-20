@@ -67,27 +67,35 @@ ui <- fluidPage(
     tabPanel('Select',
              sidebarLayout(
                sidebarPanel(
+                 style = "position:fixed;width:inherit;",
                  conditionalPanel(
-                       condition = "input.process_request",
-                       selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
-                       selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
-                       selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
-                     ),
-                     width = 2
-                   ),
+                   condition = "input.process_request",
+                   selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
+                   selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
+                   selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
+                   div(style = "height: 30px;"),
+                   selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
                    
-                   # Main panel for displaying outputs
-                   mainPanel(
-                     echarts4rOutput("perc_pie_chart"),
-                     div(style = "height: 30px;"),
-                     leafletOutput("map_oblast"),
-                     div(style = "height: 30px;"),
-                     leafletOutput("map_raion"),
-                     div(style = "height: 30px;"),
-                     leafletOutput("map_hromada"),
-                     width = 10
-                   )
-                 )
+                 ),
+                 width = 2
+               ),
+               
+               # Main panel for displaying outputs
+               mainPanel(
+                 fluidRow(
+                   column(6,plotlyOutput("graph_1_select")),
+                   column(6,plotlyOutput("graph_2_select")),
+                 ),
+                 plotlyOutput("graph_3_select", height ='900px'),
+                 div(style = "height: 30px;"),
+                 leafletOutput("map_oblast"),
+                 div(style = "height: 30px;"),
+                 leafletOutput("map_raion"),
+                 div(style = "height: 30px;"),
+                 leafletOutput("map_hromada"),
+                 width = 10
+               )
+             )
     ),
     tabPanel('Numeric',
              sidebarLayout(
@@ -97,11 +105,18 @@ ui <- fluidPage(
                    selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
                    selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
                    selectizeInput("option_numeric", "Select option:", choices = c(), multiple = FALSE),
+                   div(style = "height: 30px;"),
+                   selectizeInput("variable_orig_m_numeric", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
+                   
                    
                  ),
                  width = 2
                ),
                mainPanel(
+                 fluidRow(column(6,div(htmlOutput("numeric_text_1"), 
+                                       style = "text-align: center; color: #000080; font-size: 20px;")),
+                          column(6,plotlyOutput("graph_1_numeric"))),
+                 plotlyOutput("graph_2_numeric", height ='900px'),
                  leafletOutput("map_oblast_numeric"),
                  div(style = "height: 30px;"),
                  leafletOutput("map_raion_numeric"),
