@@ -54,7 +54,7 @@ server <- function(input, output, session) {
   select_data <- reactiveVal(NULL)
   
   # # Reactive expression to fetch the selected project
-  observeEvent(input$process,{
+  observeEvent(ignoreInit = TRUE,input$process,{
     req(input$questions)
     
     questions<- input$questions
@@ -140,7 +140,7 @@ server <- function(input, output, session) {
     
   }, server = FALSE)
   
-  observeEvent(input$dtable_cell_edit, { 
+  observeEvent(ignoreInit = TRUE,input$dtable_cell_edit, { 
     info <- input$dtable_cell_edit # this input contains the info of the edit
     
     dato <- Dat() # read the frame
@@ -155,7 +155,7 @@ server <- function(input, output, session) {
     
   })
   
-  observeEvent(input$process_request,{
+  observeEvent(ignoreInit = TRUE,input$process_request,{
     
     
     # output$table <- NULL
@@ -249,22 +249,23 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       )
     )
     
-    DAF_template<-DAF_template
-    general_info<-general_info
+    # DAF_template<<-DAF_template
+    # general_info<<-general_info
     
     # save DAF_template and general_info as xlsx
     
     DAF_template[is.na(DAF_template$calculation),]$calculation <- 'empty'
+    DAF_template[is.na(DAF_template$disaggregations),]$disaggregations <- 'empty'
+    
     if(nrow(general_info[is.na(general_info$weight_column_name),])>0){
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
-    DAF_template[is.na(DAF_template$disaggregations),]$disaggregations <- 'empty'
     
     # write.xlsx(DAF_template,'DAF_template.xlsx')
     # write.xlsx(general_info,'general_info.xlsx')
     
     json_body <- list(
-      daf_file = DAF_template,
+      daf_file = DAF_template[20,],
       info = general_info
     )
     
@@ -282,11 +283,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
     
     df <- df %>% 
-      left_join(DAF_template %>% 
-                  select(ID, TABLE_ID, variable, admin,disaggregations) %>% 
-                  rename(variable_orig = variable,
-                         admin_orig = admin,
-                         disaggregations_orig = disaggregations)) %>% 
       left_join(general_info %>% select(TABLE_ID,month_conducted))
     
     
@@ -318,22 +314,23 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       select <- df %>%
         filter(!is.na(perc))
       
+      # testo<<-select
+      
       full_frame <- select %>%
         select(variable,option,option_orig,TABLE_ID) %>%
         distinct() %>%
         full_join(select %>% 
                     select(variable,variable_orig,
                            month_conducted,TABLE_ID,
-                           admin,admin_orig,admin_category,admin_category_orig,
+                           admin,admin_category,admin_category_orig,
                            full_count, total_count_perc) %>% 
-                    distinct())
+                    distinct()) 
       
       select <- select %>%
         right_join(full_frame) %>% 
         mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
                         'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
-               across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x)),
-               disaggregations_orig=ifelse(is.na(disaggregations_orig),'empty',disaggregations_orig))
+               across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x))) 
       
       
     } else {
@@ -391,26 +388,33 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   ################################ Geoview part ################################
   
-  observeEvent(input$project, {
-    if (!is.null(input$project) & !is.null(select_data())) {
+  observeEvent(ignoreInit = TRUE,input$project, {
+    if (!is.null(input$project) & nrow(select_data())>0) {
       
       filtered_df <- select_data() %>% filter(TABLE_ID == input$project)
       
       variables <- unique(filtered_df$variable_orig)
       
       updateSelectizeInput(session, "variable_orig", choices = variables)
-      updateSelectizeInput(session, "variable_orig_m", choices = variables, selected = variables[1])
+      
+      
+      variables_m <- unique(select_data()$variable_orig)
+      
+      updateSelectizeInput(session, "variable_orig_m", choices = variables_m, selected = variables_m[1])
       
     }
     
   })
   
-  observeEvent(input$variable_orig, {
-    if (!is.null(input$variable_orig) & !is.null(select_data())) {
+  observeEvent(ignoreInit = TRUE,list(
+    input$variable_orig,
+    input$project
+    ), {
+    if (!is.null(input$variable_orig)& !is.null(input$project) & nrow(select_data())>0) {
       
       data_processed <- select_data()
       
-      filtered_df <<- data_processed %>%
+      filtered_df <- data_processed %>%
         filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
                perc>0)
       
@@ -450,9 +454,18 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       
       
+      
       # disaggregation graph
       overall_disaggregation_data <- filtered_df %>%
-        filter(admin == "Overall" & disaggregations_category_1 != " Overall")
+        filter(admin == "Overall")
+      
+      check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), ' Overall')
+      
+      # check if we even have gender data for this
+      if(length(check_categories)>0){
+        overall_disaggregation_data <- overall_disaggregation_data %>% 
+          filter(!disaggregations_category_1 %in% ' Overall',)
+      }
       
       title <- paste0(unique(overall_disaggregation_data$variable),'<br>')
       
@@ -471,8 +484,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   
-  observeEvent(input$variable_orig_m,{
-    if(!is.null(input$variable_orig_m) & !is.null(select_data())){
+  observeEvent(ignoreInit = TRUE,input$variable_orig_m,{
+    if(!is.null(input$variable_orig_m) & nrow(select_data())>0){
       
       data_processed <- select_data()
       
@@ -521,8 +534,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   
-  observeEvent(input$option, {
-    if (!is.null(input$option) & !is.null(select_data())) {
+  observeEvent(ignoreInit = TRUE,input$option, {
+    if (!is.null(input$option) & nrow(select_data())>0) {
       
       filtered_df <- select_data() %>%
         filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 == " Overall" & option == input$option)
@@ -580,7 +593,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     ##### numeric
     
-    observeEvent(input$project_numeric, {
+    observeEvent(ignoreInit = TRUE,input$project_numeric, {
       if (!is.null(input$project_numeric) & !is.null(numeric_data())) {
         
         filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
@@ -588,13 +601,16 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         variables <- unique(filtered_df$variable_orig)
         
         updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
-        updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables, selected = variables[1])
+
+        variables_m <- unique(numeric_data()$variable_orig)
+
+        updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables_m, selected = variables_m[1])
         
       }
       
     })
     
-    observeEvent(input$variable_orig_numeric, {
+    observeEvent(ignoreInit = TRUE,input$variable_orig_numeric, {
       if (!is.null(input$variable_orig_numeric) & !is.null(numeric_data())) {
         
         filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
@@ -612,8 +628,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   observeEvent(ignoreInit = TRUE, list(
     input$variable_orig_numeric,
-    input$option_numeric), {
-      if (!is.null(input$option_numeric) & !is.null(numeric_data()) & input$option_numeric!='') {
+    input$option_numeric,
+    input$project_numeric), {
+      if (!is.null(input$option_numeric) & nrow(numeric_data())>0 & input$option_numeric!='' &
+          !is.null(input$project_numeric)) {
         
         processed_numerics <- numeric_data()
         
@@ -621,7 +639,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
                    disaggregations_category_1 == " Overall")
         
-        
+        print('no')
         # basic stats
         basic_stat_number <- filtered_df %>% 
           filter(admin_category==' Overall') %>% 

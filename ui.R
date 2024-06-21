@@ -56,11 +56,12 @@ ui <- fluidPage(
                  uiOutput('button2'),
                  div(style = "height: 10px;"),
                  downloadButton("excel", "Download Excel"),
-                 width = 2
+                 width = 4
                ),
                
                mainPanel(
-                 DTOutput("table")
+                 DTOutput("table"),
+                 width = 8
                )
              )
     ),
@@ -100,6 +101,7 @@ ui <- fluidPage(
     tabPanel('Numeric',
              sidebarLayout(
                sidebarPanel(
+                 style = "position:fixed;width:inherit;",
                  conditionalPanel(
                    condition = "input.process_request",
                    selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
