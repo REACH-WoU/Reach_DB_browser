@@ -451,7 +451,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       
       overall_admin_data <- filtered_df %>%
-        filter(admin == "Overall" & disaggregations_category_1 == " Overall")
+        filter(admin == "Overall" & disaggregations_category_1 == " Overall") %>% 
+        rowwise() %>% 
+        mutate(option = paste(strwrap(option, width = 35), collapse = "\n")) %>% 
+        ungroup()
       
       options <- unique(filtered_df$option)
       
@@ -460,12 +463,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       # basic chart
       
-      total_cnt <- round(sum(overall_admin_data$perc),0)
+      total_cnt <- round(sum(overall_admin_data$perc)*100,0)
       title <- unique(overall_admin_data$variable)
       
       
       output$graph_1_select <- renderPlotly({
-        if(total_cnt==0){
+        if(total_cnt==100){
           graph_1 <- plot_ly(overall_admin_data, labels = ~option, values = ~weighted_count, type = 'pie', hole = 0.6) %>%
             layout(title = list(text = paste0("<b>",title ,"</b>"),
                                 font = list(color = '#000080', size = 12)),
@@ -488,7 +491,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       # disaggregation graph
       overall_disaggregation_data <- filtered_df %>%
-        filter(admin == "Overall")
+        filter(admin == "Overall") %>% 
+        rowwise() %>% 
+        mutate(option = paste(strwrap(option, width = 35), collapse = "\n")) %>% 
+        ungroup()
       
       check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), ' Overall')
       
@@ -541,7 +547,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'))
       
-      cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc) %>% round(.,0)
+      cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc)
+      cnts <- round(cnts*100,0)
       title <- paste0(graph_base3$variable, '<br>')
       # cut off the title if it is too long
       title <- substr(title, 1, 50)
@@ -550,7 +557,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       
       output$graph_3_select <- renderPlotly({
-        if(all(cnts==1)){
+        if(all(cnts==100)){
           
           plot_ly(graph_base3, x = ~period_full, y = ~perc*100 , color = ~option, type = 'bar',
                   text = ~paste0(round(perc*100,1),'%'),
@@ -569,7 +576,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                   textfont =  list(size = 12,color = 'black')) %>%
             layout(title = list(text=paste0("<b>",title ,"</b>"),
                                 font = list(color = '#000080', size = 12)),
-                   legend = list(x = 0, y = -0.2),
                    xaxis = list(title = ""),
                    yaxis = list(ticksuffix = "%",title = ""))
           
