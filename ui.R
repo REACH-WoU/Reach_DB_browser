@@ -44,8 +44,9 @@ ui <- fluidPage(
              # Sidebar layout with input and output definitions
              sidebarLayout(
                sidebarPanel(
+                 selectizeInput("project_search", "Select project:", choices = c(), multiple = FALSE, selected = 'Overall'),
                  selectizeInput("questions",
-                                "Select an option:",
+                                "Select a question:",
                                 choices = '',
                                 multiple = TRUE),
                  
@@ -60,40 +61,36 @@ ui <- fluidPage(
                ),
                
                mainPanel(
-                 DTOutput("table"),
+                 DT::DTOutput("table"),
                  width = 8
                )
              )
     ),
-    tabPanel('Select',
+    tabPanel('Categorical',
              sidebarLayout(
                sidebarPanel(
                  style = "position:fixed;width:inherit;",
-                 conditionalPanel(
-                   condition = "input.process_request",
-                   selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
-                   selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
-                   selectizeInput("option", "Select option:", choices = c(), multiple = FALSE),
-                   div(style = "height: 30px;"),
-                   selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
-                   
-                 ),
+                 selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
+                 selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
+                 selectizeInput("option", "Select map z-col option:", choices = c(), multiple = FALSE),
+                 # div(style = "height: 30px;"),
+                 # selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
                  width = 2
                ),
                
                # Main panel for displaying outputs
                mainPanel(
                  fluidRow(
-                   column(6,plotlyOutput("graph_1_select")),
-                   column(6,plotlyOutput("graph_2_select")),
+                   column(6, plotly::plotlyOutput("graph_1_select")),
+                   column(6, plotly::plotlyOutput("graph_2_select")),
                  ),
-                 plotlyOutput("graph_3_select", height ='900px'),
+                 # plotlyOutput("graph_3_select", height ='900px'),
+                 div(style = "height: 50px;"),
+                 leaflet::leafletOutput("map_oblast"),
                  div(style = "height: 30px;"),
-                 leafletOutput("map_oblast"),
+                 leaflet::leafletOutput("map_raion"),
                  div(style = "height: 30px;"),
-                 leafletOutput("map_raion"),
-                 div(style = "height: 30px;"),
-                 leafletOutput("map_hromada"),
+                 leaflet::leafletOutput("map_hromada"),
                  width = 10
                )
              )
@@ -102,31 +99,52 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  style = "position:fixed;width:inherit;",
-                 conditionalPanel(
-                   condition = "input.process_request",
-                   selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
-                   selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
-                   selectizeInput("option_numeric", "Select option:", choices = c(), multiple = FALSE),
-                   div(style = "height: 30px;"),
-                   selectizeInput("variable_orig_m_numeric", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
-                   
-                   
-                 ),
+                 selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
+                 selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
+                 selectizeInput("option_numeric", "Select map z-col option:", choices = c(), multiple = FALSE),
+                 # div(style = "height: 30px;"),
+                 # selectizeInput("variable_orig_m_numeric", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
                  width = 2
                ),
                mainPanel(
-                 fluidRow(column(6,div(htmlOutput("numeric_text_1"), 
-                                       style = "text-align: center; color: #000080; font-size: 20px;")),
-                          column(6,plotlyOutput("graph_1_numeric"))),
-                 plotlyOutput("graph_2_numeric", height ='900px'),
-                 leafletOutput("map_oblast_numeric"),
+                 # div(htmlOutput("numeric_text_1")),
+                 plotly::plotlyOutput("graph_1_numeric"),
+                 # fluidRow(column(6, div(htmlOutput("numeric_text_1"), 
+                 #                       style = "text-align: center; color: #000080; font-size: 20px;")),
+                 #          column(6, plotly::plotlyOutput("graph_1_numeric"))),
+                 # plotlyOutput("graph_2_numeric", height ='900px'),
+                 div(style = "height: 50px;"),
+                 leaflet::leafletOutput("map_oblast_numeric"),
                  div(style = "height: 30px;"),
-                 leafletOutput("map_raion_numeric"),
+                 leaflet::leafletOutput("map_raion_numeric"),
                  div(style = "height: 30px;"),
-                 leafletOutput("map_hromada_numeric")
+                 leaflet::leafletOutput("map_hromada_numeric")
                )
              )
-    )
+    ),
+    tabPanel('Timeline categorical view',
+             sidebarLayout(
+               sidebarPanel(
+                 style = "position:fixed;width:inherit;",
+                 selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),                 width = 2
+               ),
+               mainPanel(
+                 plotly::plotlyOutput("graph_3_select", height ='900px'),
+               )
+             )
+    ),
+    tabPanel('Timeline numeric view',
+             sidebarLayout(
+               sidebarPanel(
+                 style = "position:fixed;width:inherit;",
+                 selectizeInput("variable_orig_m_numeric", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
+                 width = 2
+               ),
+               mainPanel(
+                 plotly::plotlyOutput("graph_2_numeric", height ='900px'),
+               )
+             )
+    ),
   )
   
 )

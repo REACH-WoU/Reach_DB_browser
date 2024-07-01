@@ -38,13 +38,31 @@ server <- function(input, output, session) {
   
   # ---------------------------the requests page --------------------------------
   
+  updateSelectInput(session, "project_search", choices = c("Overall", unique(unique_table$project_ID)))
   
-  updateSelectizeInput(
-    session,
-    inputId = "questions",
-    label   = "Select an option:",
-    choices = unique_questions,
-    server  = TRUE )
+  observeEvent(input$project_search,{
+    if(input$project_search == "Overall"){
+      updateSelectizeInput(
+        session,
+        inputId = "questions",
+        label   = "Select an option:",
+        choices = unique_questions,
+        server  = TRUE )
+    } else {
+      projects_question <- unique_table %>% 
+        filter(project_ID == input$project_search) %>% 
+        pull(database_label_clean)
+      
+      updateSelectizeInput(
+        session,
+        inputId = "questions",
+        label   = "Select an option:",
+        choices = projects_question,
+        server  = TRUE )
+    }
+  })
+  
+  
   
   
   datasetInput <- reactiveVal(NULL)
@@ -54,7 +72,7 @@ server <- function(input, output, session) {
   select_data <- reactiveVal(NULL)
   
   # # Reactive expression to fetch the selected project
-  observeEvent(ignoreInit = TRUE,input$process,{
+  observeEvent(ignoreInit = TRUE, input$process,{
     req(input$questions)
     
     questions<- input$questions
@@ -102,66 +120,77 @@ server <- function(input, output, session) {
       cbind(df_choices_added, check = shinyInput(checkboxInput, nrow(df_choices_added), "checkb")
       ))
     
-    Dat(cbind(df_choices_added, bool = FALSE))  
+    Dat(cbind(df_choices_added, bool = FALSE)) 
+    
+    output$table <- renderDT({
+      df <- datasetInput()
+      if(is.null(df)){
+        return(NULL)
+      }else{
+        tbl <- datatable(
+          df,
+          filter = "top",
+          class = list(stripe = FALSE),
+          escape = FALSE,
+          editable = list(target = "cell", disable = list(columns = 16)),
+          selection = "none",
+          callback = JS(js),
+          options = list(
+            dom = 'lfrtipB',
+            pageLength = 100,
+            columnDefs = list(
+              list(targets = "_all", width = '15px')
+              ,
+              list(visible=FALSE, targets=(which(names(df)%in% c('survey_type','round_ID',
+                                                                 'TABLE_ID','list_name','datasheet','name'))-1)
+              )
+            )),
+          rownames = FALSE,
+        )
+        
+        return(tbl)
+        
+      }
+      
+    }, server = FALSE)
     
   })
   
-  
-  # Render the DataTable
-  output$table <- renderDT({
-    df <- datasetInput()
-    if(is.null(df)){
-      return(NULL)
-    }else{
-      tbl <- datatable(
-        df,
-        filter = "top",
-        class = list(stripe = FALSE),
-        escape = FALSE,
-        editable = list(target = "cell", disable = list(columns = 16)),
-        selection = "none",
-        callback = JS(js),
-        options = list(
-          dom = 'lfrtipB',
-          pageLength = 100,
-          columnDefs = list(
-            list(targets = "_all", width = '15px')
-            ,
-            list(visible=FALSE, targets=(which(names(df)%in% c('survey_type','round_ID',
-                                                               'TABLE_ID','list_name','datasheet','name'))-1)
-            )
-          )),
-        rownames = FALSE,
-      )
-      
-      return(tbl)
-      
-    }
-    
-  }, server = FALSE)
-  
-  observeEvent(ignoreInit = TRUE,input$dtable_cell_edit, { 
+  observeEvent(ignoreInit = TRUE, input$dtable_cell_edit, { 
     info <- input$dtable_cell_edit # this input contains the info of the edit
-    
+    print(info)
     dato <- Dat() # read the frame
     dato$bool <- as.character(dato$bool)# convert to character (no warnings this way)
     Dat(editData(dato, info))# update the reactive
     
-    # if(any(Dat()$bool)){
-    output$button2 <- renderUI({
-      actionButton("process_request", "Send the request to the server")
-    })
-    # }
+    if(any(Dat()$bool)){
+      output$button2 <- renderUI({
+        actionButton("process_request", "Send the request to the server")
+      })
+    }
     
   })
   
-  observeEvent(ignoreInit = TRUE,input$process_request,{
+  observeEvent(ignoreInit = TRUE, input$process_request,{
     
+    # output$table <- renderDT({
+    #   return(NULL)
+    # })
+    output$button2 <- renderUI({NULL})
     
-    # output$table <- NULL
     selected_frame <- Dat()
+    print(colnames(selected_frame))
+    selected_frame <- selected_frame %>% filter(bool == 'TRUE')
     
-    selected_frame <- selected_frame %>% filter(bool =='TRUE')
+    if (nrow(selected_frame) == 0) {
+      showModal(modalDialog(
+        title = "Error",
+        "Please select at least one row",
+        easyClose = TRUE,
+        footer = NULL
+      ))
+      return()
+    }
     
     rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet,representative_columns from data_representative_table")
     rep_table_overview_geo <- rep_table_overview %>% 
@@ -193,13 +222,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       rename(main_sheet_name =TABLE_NAME,
              weight_column_name = COLUMN_NAME)
     
+    print(nrow(general_info))
     if(nrow(weight_table)>0){
       general_info <- general_info %>% 
         left_join(weight_table)
     }else{
       general_info$weight_column_name <- NA
     }
-    
     
     DAF_disaggs <- database_project %>% 
       mutate(TABLE_ID = paste0(project_ID,'_R',round_ID,'_',survey_type)) %>% 
@@ -238,7 +267,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       mutate(DB_table_name = paste0('data_',TABLE_ID,'_',datasheet_names,'_DCMPR')) %>% 
       select(-datasheet_names) 
     
-    
     removeModal()
     showModal(
       modalDialog(
@@ -248,7 +276,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         easyClose = TRUE
       )
     )
-    
     # DAF_template<<-DAF_template
     # general_info<<-general_info
     
@@ -265,7 +292,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     # write.xlsx(general_info,'general_info.xlsx')
     
     json_body <- list(
-      daf_file = DAF_template[20,],
+      daf_file = DAF_template,
       info = general_info
     )
     
@@ -354,10 +381,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     projects_numeric <- unique(numeric$TABLE_ID)
     projects_select <- unique(select$TABLE_ID)
-    print(projects_select)
+    print(unique(numeric$variable_orig))
     
-    updateSelectizeInput(session, "project", choices = projects_select, selected = NULL)
-    updateSelectizeInput(session, "project_numeric", choices = projects_numeric, selected = NULL)
+    updateSelectizeInput(session, "project", choices = projects_select)
+    updateSelectizeInput(session, "project_numeric", choices = projects_numeric)
     
     showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
                      type = 'message')
@@ -437,7 +464,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         if(total_cnt==0){
           graph_1 <- plot_ly(overall_admin_data, labels = ~option, values = ~weighted_count, type = 'pie', hole = 0.6) %>%
             layout(title = list(text = paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
+                                font = list(color = '#000080', size = 12)),
                    showlegend = TRUE)
           
         }else{
@@ -445,7 +472,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                              text = ~paste0(round(perc*100,1),'%'),
                              textposition = 'outside') %>%
             layout(title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
+                                font = list(color = '#000080', size = 12)),
                    xaxis = list(ticksuffix = "%",title = "", range = c(0,110)),
                    yaxis = list(title = ""))
         }
@@ -468,15 +495,26 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       }
       
       title <- paste0(unique(overall_disaggregation_data$variable),'<br>')
+      # cut off the title if it is too long
+      title <- substr(title, 1, 50)
+      title <- paste0(title, '...')
+      title <- paste0(title,'<br>')
       
       output$graph_2_select <- renderPlotly({
         plot_ly(overall_disaggregation_data, x = ~perc*100, y = ~option, color = ~disaggregations_category_1, type = 'bar',
                 text = ~paste0(round(perc*100,1),'%'),
-                textposition = 'outside') %>%
-          layout(title = list(text=paste0("<b>",title ,"</b>"),
-                              font = list(color = '#000080', size = 16)),
-                 xaxis = list(ticksuffix = "%",title = "", range = c(0,110)),
-                 yaxis = list(title = ""))
+                textposition = 'auto',
+                insidetextanchor = 'start',
+                hoverinfo = 'text',
+                marker = list(line = list(width = 1, color = "black"))) %>%
+          layout(title = list(text = paste0("<b>", title , "</b>"),
+                              font = list(color = '#000080', size = 12)),
+                 xaxis = list(ticksuffix = "%", title = "", range = c(0,110),
+                              automargin = TRUE),
+                 yaxis = list(title = "", automargin = TRUE),
+                 margin = list(l = 100, r = 20, t = 50, b = 50),
+                 height = 400,
+                 showlegend = TRUE)
       })
       
     }
@@ -496,11 +534,15 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                admin %in% 'Overall',
                perc>0) %>% 
         rowwise() %>% 
-        mutate(variable =paste(strwrap(variable, width = 35), collapse = "<br>"),
-               period_full = paste(month_conducted,TABLE_ID,variable,sep = '<br>'))
+        mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
+               period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'))
       
       cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc) %>% round(.,0)
-      title <- paste0(unique(graph_base3$variable),'<br>')
+      title <- paste0(graph_base3$variable, '<br>')
+      # cut off the title if it is too long
+      title <- substr(title, 1, 50)
+      title <- paste0(title, '...')
+      title <- paste0(title,'<br>')
       
       
       output$graph_3_select <- renderPlotly({
@@ -512,7 +554,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                   textfont =  list(size = 12,color = 'black')) %>%
             layout(barmode = 'stack', 
                    title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
+                                font = list(color = '#000080', size = 12)),
                    legend = list(x = 0, y = -0.2),
                    xaxis = list(title = ""),
                    yaxis = list(ticksuffix = "%",title = ""))
@@ -522,7 +564,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                   textposition = 'outside',
                   textfont =  list(size = 12,color = 'black')) %>%
             layout(title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
+                                font = list(color = '#000080', size = 12)),
                    legend = list(x = 0, y = -0.2),
                    xaxis = list(title = ""),
                    yaxis = list(ticksuffix = "%",title = ""))
@@ -591,46 +633,44 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
     }
     
-    ##### numeric
-    
-    observeEvent(ignoreInit = TRUE,input$project_numeric, {
-      if (!is.null(input$project_numeric) & !is.null(numeric_data())) {
-        
-        filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
-        
-        variables <- unique(filtered_df$variable_orig)
-        
-        updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
-
-        variables_m <- unique(numeric_data()$variable_orig)
-
-        updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables_m, selected = variables_m[1])
-        
-      }
+  })
+  ##### numeric
+  
+  observeEvent(ignoreInit = TRUE, input$project_numeric, {
+    if (!is.null(input$project_numeric) & nrow(numeric_data()) > 0) {
       
-    })
-    
-    observeEvent(ignoreInit = TRUE,input$variable_orig_numeric, {
-      if (!is.null(input$variable_orig_numeric) & !is.null(numeric_data())) {
-        
-        filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
-        
-        options <- c("mean", "min", "max", "median")
-        
-        updateSelectizeInput(session, "option_numeric", choices = options)
-      }
+      filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
       
-    })
+      variables <- unique(filtered_df$variable_orig)
+      
+      updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
+      
+      variables_m <- unique(numeric_data()$variable_orig)
+      
+      updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables_m, selected = variables_m[1])
+      
+    }
     
   })
   
+  observeEvent(ignoreInit = TRUE, input$variable_orig_numeric, {
+    if (!is.null(input$variable_orig_numeric) & nrow(numeric_data()) > 0) {
+      
+      filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
+      
+      options <- c("mean", "min", "max", "median")
+      
+      updateSelectizeInput(session, "option_numeric", choices = options)
+    }
+    
+  })
   
   
   observeEvent(ignoreInit = TRUE, list(
     input$variable_orig_numeric,
     input$option_numeric,
     input$project_numeric), {
-      if (!is.null(input$option_numeric) & nrow(numeric_data())>0 & input$option_numeric!='' &
+      if (!is.null(input$option_numeric) & nrow(numeric_data())> 0 & input$option_numeric != '' &
           !is.null(input$project_numeric)) {
         
         processed_numerics <- numeric_data()
@@ -639,18 +679,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
                    disaggregations_category_1 == " Overall")
         
-        print('no')
         # basic stats
         basic_stat_number <- filtered_df %>% 
           filter(admin_category==' Overall') %>% 
           pull(!!sym(input$option_numeric))
         
         
-        output$numeric_text_1 <- renderText({paste0(
-          unique(filtered_df$variable),
-          '<br>',input$option_numeric,' of ',round(basic_stat_number,2)
-        )
-        })
+        # output$numeric_text_1 <- renderText({paste0(
+        #   unique(filtered_df$variable),
+        #   '<br>',input$option_numeric,' of ',round(basic_stat_number,2)
+        # )
+        # })
         
         # disaggregation graph
         graph_base_n2 <- processed_numerics %>% 
@@ -661,7 +700,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                  vis_variable  = !!sym(input$option_numeric))
         
-        title <- unique(graph_base_n2$variable)
+        title <- paste0(unique(graph_base_n2$variable),'<br>')
+        # cut off the title if it is too long
+        title <- substr(title, 1, 50)
+        title <- paste0(title, '...')
+        title <- paste0(title,'<br>')
         
         check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), ' Overall')
         
@@ -670,14 +713,50 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
             filter(!disaggregations_category_1 %in% ' Overall',)
         }
         
+        graph_base_n2 <- graph_base_n2 %>%
+          pivot_longer(cols = c('mean', 'min', 'max', 'median'), names_to = 'statistic', values_to = 'value')
+        
+        # output$graph_1_numeric <- renderPlotly({
+        #   plot_ly(graph_base_n2, x = ~variable, y = ~vis_variable, color = ~disaggregations_category_1, type = 'bar',
+        #           text = ~round(vis_variable,1),
+        #           textposition = 'outside') %>%
+        #     layout(title = list(text=paste0("<b>",title ,"</b>"),
+        #                         font = list(color = '#000080', size = 12)),
+        #            xaxis = list(title = ""),
+        #            yaxis = list(title = ""))
+        # })
+        
         output$graph_1_numeric <- renderPlotly({
-          plot_ly(graph_base_n2, x = ~vis_variable, y = ~variable, color = ~disaggregations_category_1, type = 'bar',
-                  text = ~round(vis_variable,1),
-                  textposition = 'outside') %>%
-            layout(title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
-                   xaxis = list(title = ""),
-                   yaxis = list(title = ""))
+          plot_ly(
+            graph_base_n2, 
+            x = ~statistic, 
+            y = ~value, 
+            type = 'bar', 
+            color = ~disaggregations_category_1,
+            text = ~value, 
+            textposition = 'auto'
+          ) %>%
+            layout(
+              barmode = 'group',
+              title = list(
+                text = "Summary Statistics by Gender",
+                font = list(size = 24)
+              ),
+              xaxis = list(
+                title = "Statistic",
+                titlefont = list(size = 18),
+                tickfont = list(size = 14)
+              ),
+              yaxis = list(
+                title = "Value",
+                titlefont = list(size = 18),
+                tickfont = list(size = 14)
+              ),
+              margin = list(t = 50, b = 50),
+              paper_bgcolor = 'rgba(245, 246, 249, 1)',
+              plot_bgcolor = 'rgba(245, 246, 249, 1)',
+              hovermode = 'closest'
+            )
         })
         
         
@@ -752,19 +831,61 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                  viz_variable = !!sym(input$option_numeric))
         
         title <- paste0(unique(graph_base3$variable),'<br>')
+        # cut off the title if it is too long
+        title <- substr(title, 1, 50)
+        title <- paste0(title, '...')
+        title <- paste0(title,'<br>')
         
+        
+        # output$graph_2_numeric <- renderPlotly({
+        #   plot_ly(graph_base3, x = ~period_full, y = ~viz_variable , type = 'bar',
+        #           text = ~round(viz_variable,1),
+        #           textposition = 'outside',
+        #           textfont =  list(size = 12,color = 'black')) %>%
+        #     layout(title = list(text=paste0("<b>",title ,"</b>"),
+        #                         font = list(color = '#000080', size = 1)),
+        #            legend = list(x = 0, y = -0.2),
+        #            xaxis = list(title = ""),
+        #            yaxis = list(title = ""))
+        #   
+        # })
+        
+        graph_base3 <- graph_base3 %>%
+          pivot_longer(cols = c('mean', 'min', 'max', 'median'),
+                       names_to = 'statistic',
+                       values_to = 'value')
         
         output$graph_2_numeric <- renderPlotly({
-          plot_ly(graph_base3, x = ~period_full, y = ~viz_variable , type = 'bar',
-                  text = ~round(viz_variable,1),
-                  textposition = 'outside',
-                  textfont =  list(size = 12,color = 'black')) %>%
-            layout(title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 16)),
-                   legend = list(x = 0, y = -0.2),
-                   xaxis = list(title = ""),
-                   yaxis = list(title = ""))
-          
+          plot <- plot_ly(
+            graph_base3,
+            x = ~period_full,
+            y = ~value,
+            color = ~statistic,
+            colors = c('mean' = 'green', 'max' = 'red', 
+                       'median' = 'orange', 'min' = 'blue'),
+            type = 'bar',
+            text = ~paste(statistic, ": ", value),
+            hoverinfo = "text"
+          ) %>%
+            layout(
+              barmode = 'group',
+              title = list(
+                text = "Summary Statistics by Variable and Project",
+                font = list(size = 24)
+              ),
+              xaxis = list(
+                title = "Variable",
+                titlefont = list(size = 18),
+                tickfont = list(size = 14)
+              ),
+              yaxis = list(
+                title = "Value",
+                titlefont = list(size = 18),
+                tickfont = list(size = 14)
+              ),
+              margin = list(t = 50, b = 100),
+              hovermode = 'closest'
+            )
         })
         
       }
