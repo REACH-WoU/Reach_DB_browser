@@ -115,7 +115,8 @@ server <- function(input, output, session) {
                 ) %>%
                 mutate(name = str_squish(name))) %>% 
       left_join(rep_table) %>% 
-      select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,english_question,ukrainian_question,russian_question,representative_at,oblast,
+      select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,
+             english_question,ukrainian_question,russian_question,representative_at,oblast,
              month_conducted,name)
     
     removeModal()
@@ -128,10 +129,27 @@ server <- function(input, output, session) {
     
     output$table <- renderDT({
       df <- datasetInput()
+      df <- df %>% 
+        mutate(representative_at = gsub('\\,',', ',representative_at))
+      
+      # remove every second space to have a wider bar in the table
+      df$oblast <- vapply(df$oblast, function(x){
+        ls <- unlist(str_split(x,','))
+        for(i in 1:length(ls)){
+          if(i%%2==0){
+            ls[i] <- gsub(' ','',ls[i])
+          }
+        }
+        output <- paste(ls,collapse = ',')
+        return(output)
+      },character(1)
+      )
+      
+      
       if(is.null(df)){
         return(NULL)
       }else{
-        tbl <- datatable(
+        datatable(
           df,
           filter = "top",
           class = list(stripe = FALSE),
@@ -141,18 +159,18 @@ server <- function(input, output, session) {
           callback = JS(js),
           options = list(
             dom = 'lfrtipB',
+            # scrollX=T,
+            # autoWidth = TRUE,
             pageLength = 100,
             columnDefs = list(
-              list(targets = "_all", width = '15px')
-              ,
+              # list(targets = c(which(names(df)=='oblast')-1), width = '200px'),
               list(visible=FALSE, targets=(which(names(df)%in% c('survey_type','round_ID',
                                                                  'TABLE_ID','list_name','datasheet','name'))-1)
               )
             )),
           rownames = FALSE,
-        )
-        
-        return(tbl)
+        )%>% 
+          formatStyle(0:ncol(df), `border-bottom` = "solid 2px #000")
         
       }
       
@@ -226,7 +244,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       rename(main_sheet_name =TABLE_NAME,
              weight_column_name = COLUMN_NAME)
     
-    print(nrow(general_info))
     if(nrow(weight_table)>0){
       general_info <- general_info %>% 
         left_join(weight_table)
@@ -360,7 +377,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       select <- select %>%
         right_join(full_frame) %>% 
         mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
-                        'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
+                               'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
                across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x))) 
       
       
@@ -440,7 +457,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   observeEvent(ignoreInit = TRUE,list(
     input$variable_orig,
     input$project
-    ), {
+  ), {
     if (!is.null(input$variable_orig)& !is.null(input$project) & nrow(select_data())>0) {
       
       data_processed <- select_data()
@@ -453,7 +470,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       overall_admin_data <- filtered_df %>%
         filter(admin == "Overall" & disaggregations_category_1 == " Overall") %>% 
         rowwise() %>% 
-        mutate(option = paste(strwrap(option, width = 35), collapse = "\n")) %>% 
+        mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
         ungroup()
       
       options <- unique(filtered_df$option)
@@ -493,7 +510,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       overall_disaggregation_data <- filtered_df %>%
         filter(admin == "Overall") %>% 
         rowwise() %>% 
-        mutate(option = paste(strwrap(option, width = 35), collapse = "\n")) %>% 
+        mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
         ungroup()
       
       check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), ' Overall')
@@ -529,6 +546,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
     }
     
+    
   })
   
   
@@ -545,7 +563,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                perc>0) %>% 
         rowwise() %>% 
         mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
-               period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'))
+               period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'),
+               option = paste(strwrap(option, width = 35), collapse = "<br>"))
       
       cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc)
       cnts <- round(cnts*100,0)
@@ -640,7 +659,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                                                             "OpenTopoMap"))@map
         })
       }
-      
+
     }
     
   })

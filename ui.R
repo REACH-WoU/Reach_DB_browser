@@ -141,10 +141,12 @@ ui <- fluidPage(
              sidebarLayout(
                sidebarPanel(
                  style = "position:fixed;width:inherit;",
-                 selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),                 width = 2
+                 selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
+                 width = 2
                ),
                mainPanel(
                  plotly::plotlyOutput("graph_3_select", height ='900px'),
+                 width = 10
                )
              )
     ),
@@ -157,6 +159,7 @@ ui <- fluidPage(
                ),
                mainPanel(
                  plotly::plotlyOutput("graph_2_numeric", height ='900px'),
+                 width = 10
                )
              )
     ),
