@@ -1,3 +1,18 @@
+library(httr)
+library(data.table)
+library(DT)
+library(tidyr)
+library(dplyr)
+library(shiny)
+library(stringr)
+library(openxlsx)
+library(jsonlite)
+library(mapview)
+library(sf)
+library(leaflet)
+library(plotly)
+
+
 # UI
 
 ui <- fluidPage(

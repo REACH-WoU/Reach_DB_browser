@@ -58,8 +58,9 @@ rep_table <- rep_table %>%
 # create sf dataframe with 1 point in Kiyv and lable "No Data"
 
 oblast_json <- st_read("www/geodata/Oblasts.geojson")
-raion_json <- st_read("www/geodata/Raions.json")
-hromada_json <- st_read("www/geodata/Hromadas.json")
+raion_json <- st_read("www/geodata/Raions.geojson")
+hromada_json <- st_read("www/geodata/Hromadas.geojson")
+
 
 query <- "SELECT * FROM [dbo].[representative_columns_table];"
 

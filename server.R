@@ -25,8 +25,12 @@ shinyInput <- function(FUN, len, id, ...) {
   inputs
 }
 
+source('www/src/get_db.R')
+source('www/src/load_data.R')
 
 server <- function(input, output, session) {
+  
+  
   # ----------------------------readme -------------------------------------------------
   
   # output$text_row1 <- renderText({})
