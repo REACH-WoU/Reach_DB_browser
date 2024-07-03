@@ -10,6 +10,7 @@ library(jsonlite)
 library(mapview)
 library(sf)
 library(leaflet)
+library(markdown)
 library(plotly)
 
 
@@ -76,7 +77,7 @@ ui <- fluidPage(
                ),
                
                mainPanel(
-                 DT::DTOutput("table"),
+                 DTOutput("table"),
                  width = 8
                )
              )
@@ -162,6 +163,9 @@ ui <- fluidPage(
                  width = 10
                )
              )
+    ),
+    tabPanel('Read me',
+             includeMarkdown("README.md")
     ),
   )
   

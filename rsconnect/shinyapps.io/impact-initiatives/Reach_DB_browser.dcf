@@ -5,7 +5,7 @@ account: impact-initiatives
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 12181359
-bundleId: 8810645
+bundleId: 8818560
 url: https://impact-initiatives.shinyapps.io/Reach_DB_browser/
 version: 1
 asMultiple: FALSE
