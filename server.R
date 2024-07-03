@@ -105,15 +105,15 @@ server <- function(input, output, session) {
       #               summarise(across(everything(), ~ paste0(.x, collapse=',\n'))) %>% 
       #               ungroup() %>% 
       #               mutate(list_name = str_squish(list_name))
-    #   ) %>% 
-    left_join(tool_survey %>%
-                select(name, contains('Label'), TABLE_ID) %>%
-                rename(
-                  english_question = `Label::English` ,
-                  ukrainian_question = `Label::Ukrainian`,
-                  russian_question = `Label::Russian`
-                ) %>%
-                mutate(name = str_squish(name))) %>% 
+      #   ) %>% 
+      left_join(tool_survey %>%
+                  select(name, contains('Label'), TABLE_ID) %>%
+                  rename(
+                    english_question = `Label::English` ,
+                    ukrainian_question = `Label::Ukrainian`,
+                    russian_question = `Label::Russian`
+                  ) %>%
+                  mutate(name = str_squish(name))) %>% 
       left_join(rep_table) %>% 
       select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,
              english_question,ukrainian_question,russian_question,representative_at,oblast,
@@ -187,7 +187,12 @@ server <- function(input, output, session) {
     
     if(any(Dat()$bool)){
       output$button2 <- renderUI({
+        tagList(
+        span("When you've selected all of the questions you want visualized, click the button below",
+             style = "font-weight: bold;"),
+        div(style = "height: 10px;"),
         actionButton("process_request", "Send the request to the server")
+        )
       })
     }
     
@@ -337,79 +342,92 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     removeModal()
     processed_data(df)
     
-    
-    
-    if ("mean" %in% colnames(df)) {
-      print("mean")
-      numeric <- df %>%
-        filter(!is.na(mean))
-    } else {
-      numeric <- data.frame(
-        TABLE_ID = character(),
-        ID = numeric(),
-        variable = character(),
-        admin = character(),
-        disaggregations = character(),
-        variable_orig = character(),
-        disaggregations_category_1 = character(),
-        option = character(),
-        admin_category_orig = character()
-      )
+  })
+  
+  # if the user has excel input let them use it here
+  observeEvent(input$file, {
+    excel_input <- readxl::read_xlsx(input$file$datapath)
+    processed_data(excel_input)
+  })
+  
+  # split the processed data into numeric and character
+  observeEvent(processed_data(),{
+    if(!is.null(processed_data())){
+      
+      df <- processed_data()
+
+      if ("mean" %in% colnames(df)) {
+        print("mean")
+        numeric <- df %>%
+          filter(!is.na(mean))
+      } else {
+        numeric <- data.frame(
+          TABLE_ID = character(),
+          ID = numeric(),
+          variable = character(),
+          admin = character(),
+          disaggregations = character(),
+          variable_orig = character(),
+          disaggregations_category_1 = character(),
+          option = character(),
+          admin_category_orig = character()
+        )
+      }
+      
+      if ("perc" %in% colnames(df)) {
+        print("perc")
+        select <- df %>%
+          filter(!is.na(perc))
+        
+        # testo<<-select
+        
+        full_frame <- select %>%
+          select(variable,option,option_orig,TABLE_ID) %>%
+          distinct() %>%
+          full_join(select %>% 
+                      select(variable,variable_orig,
+                             month_conducted,TABLE_ID,
+                             admin,admin_category,admin_category_orig,
+                             full_count, total_count_perc) %>% 
+                      distinct()) 
+        
+        select <- select %>%
+          right_join(full_frame) %>% 
+          mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
+                                 'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
+                 across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x))) 
+        
+        
+      } else {
+        select <- data.frame(
+          TABLE_ID = character(),
+          ID = numeric(),
+          variable = character(),
+          admin = character(),
+          disaggregations = character(),
+          variable_orig = character(),
+          disaggregations_1 = character(),
+          option = character(),
+          admin_category_orig = character()
+        )
+      }
+      
+      
+      numeric_data(numeric)
+      select_data(select)
+
+      
+      projects_numeric <- unique(numeric$TABLE_ID)
+      projects_select <- unique(select$TABLE_ID)
+      print(unique(numeric$variable_orig))
+      
+      updateSelectizeInput(session, "project", choices = projects_select)
+      updateSelectizeInput(session, "project_numeric", choices = projects_numeric)
+      
+      showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
+                       type = 'message')
+      
     }
-    
-    if ("perc" %in% colnames(df)) {
-      print("perc")
-      select <- df %>%
-        filter(!is.na(perc))
-      
-      # testo<<-select
-      
-      full_frame <- select %>%
-        select(variable,option,option_orig,TABLE_ID) %>%
-        distinct() %>%
-        full_join(select %>% 
-                    select(variable,variable_orig,
-                           month_conducted,TABLE_ID,
-                           admin,admin_category,admin_category_orig,
-                           full_count, total_count_perc) %>% 
-                    distinct()) 
-      
-      select <- select %>%
-        right_join(full_frame) %>% 
-        mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
-                               'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
-               across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x))) 
-      
-      
-    } else {
-      select <- data.frame(
-        TABLE_ID = character(),
-        ID = numeric(),
-        variable = character(),
-        admin = character(),
-        disaggregations = character(),
-        variable_orig = character(),
-        disaggregations_1 = character(),
-        option = character(),
-        admin_category_orig = character()
-      )
-    }
-    
-    
-    numeric_data(numeric)
-    select_data(select)
-    
-    
-    projects_numeric <- unique(numeric$TABLE_ID)
-    projects_select <- unique(select$TABLE_ID)
-    print(unique(numeric$variable_orig))
-    
-    updateSelectizeInput(session, "project", choices = projects_select)
-    updateSelectizeInput(session, "project_numeric", choices = projects_numeric)
-    
-    showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
-                     type = 'message')
-    
   })
   
   output$excel <- downloadHandler(
@@ -432,6 +450,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       saveWorkbook(wb, file)
     }
   )
+  
   
   
   ################################ Geoview part ################################
@@ -462,16 +481,18 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       data_processed <- select_data()
       
+      
       filtered_df <- data_processed %>%
         filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
                perc>0)
-      
-      
+
       overall_admin_data <- filtered_df %>%
-        filter(admin == "Overall" & disaggregations_category_1 == " Overall") %>% 
+        filter(admin == "Overall" & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
         rowwise() %>% 
         mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
         ungroup()
+      
+
       
       options <- unique(filtered_df$option)
       
@@ -513,12 +534,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
         ungroup()
       
-      check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), ' Overall')
+      check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), c(' Overall','Overall'))
       
       # check if we even have gender data for this
       if(length(check_categories)>0){
         overall_disaggregation_data <- overall_disaggregation_data %>% 
-          filter(!disaggregations_category_1 %in% ' Overall',)
+          filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
       }
       
       title <- paste0(unique(overall_disaggregation_data$variable),'<br>')
@@ -558,7 +579,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       # timeline graph
       graph_base3 <- data_processed %>% 
         filter(variable_orig %in% input$variable_orig_m,
-               disaggregations_category_1 %in% ' Overall',
+               disaggregations_category_1 %in% c(' Overall','Overall'),
                admin %in% 'Overall',
                perc>0) %>% 
         rowwise() %>% 
@@ -609,7 +630,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     if (!is.null(input$option) & nrow(select_data())>0) {
       
       filtered_df <- select_data() %>%
-        filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 == " Overall" & option == input$option)
+        filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 %in% c('Overall',' Overall') & option == input$option)
       
       #### oblast plot
       
@@ -659,7 +680,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                                                             "OpenTopoMap"))@map
         })
       }
-
+      
     }
     
   })
@@ -706,11 +727,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         
         filtered_df <- processed_numerics %>%
           filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
-                   disaggregations_category_1 == " Overall")
+                   disaggregations_category_1 %in% c(" Overall",'Overall'))
         
         # basic stats
         basic_stat_number <- filtered_df %>% 
-          filter(admin_category==' Overall') %>% 
+          filter(admin_category%in%c(' Overall','Overall')) %>% 
           pull(!!sym(input$option_numeric))
         
         
@@ -735,11 +756,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         title <- paste0(title, '...')
         title <- paste0(title,'<br>')
         
-        check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), ' Overall')
+        check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), c(' Overall','Overall'))
         
         if(length(check_categories)>0){
           graph_base_n2 <- graph_base_n2 %>% 
-            filter(!disaggregations_category_1 %in% ' Overall',)
+            filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
         }
         
         graph_base_n2 <- graph_base_n2 %>%
@@ -852,7 +873,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         # timeline graph
         graph_base3 <- processed_numerics %>% 
           filter(variable_orig %in% input$variable_orig_m_numeric,
-                 disaggregations_category_1 %in% ' Overall',
+                 disaggregations_category_1 %in% c(' Overall','Overall'),
                  admin %in% 'Overall')%>% 
           rowwise() %>% 
           mutate(variable =paste(strwrap(variable, width = 35), collapse = "<br>"),

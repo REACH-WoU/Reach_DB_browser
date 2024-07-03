@@ -68,11 +68,25 @@ ui <- fluidPage(
                  
                  # Empty space with CSS styling
                  div(style = "height: 10px;"),
+                 span('Once the options have been selected, click the button below to build the table of the available data',
+                      style = "font-weight: bold;"),
+                 div(style = "height: 10px;"),
                  actionButton("process", "Build table"),
                  div(style = "height: 10px;"),
                  uiOutput('button2'),
                  div(style = "height: 10px;"),
+                 span('If you want to save the current selection of variables for the future, you can download an excel file with them',
+                      style = "font-weight: bold;"),
+                 div(style = "height: 10px;"),
                  downloadButton("excel", "Download Excel"),
+                 div(style = 'height: 10px'),
+                 tags$hr(style = "border: 1px solid black;"),
+                 div(checkboxInput("checker", "I already have an excel file I'd like to use"),
+                     style = "font-size: 18px !important"),
+                 div(style = 'height: 10px'),
+                 conditionalPanel(
+                   condition = "input.checker == true",
+                   fileInput("file", "Upload the excel file here", accept = ".xlsx")),
                  width = 4
                ),
                
