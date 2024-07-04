@@ -347,11 +347,40 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   # if the user has excel input let them use it here
   observeEvent(input$file, {
     excel_input <- readxl::read_xlsx(input$file$datapath)
+    
+    # check that excel file is valid
+    columns.set <- c("ID", "admin", "admin_category", "option", "variable",
+                     "disaggregations_category_1", "disaggregations_1",
+                     "weighted_count", "unweighted_count", "perc", "general_count",
+                     "full_count", "total_count_perc", "option_orig",
+                     "disaggregations_category_1_orig", "admin_category_orig",
+                     "variable_orig", "disaggregations_1_orig", "TABLE_ID", "mean",
+                     "median", "min", "max", "month_conducted")
+    
+    if(!all(columns.set %in% colnames(excel_input))){
+      showModal(modalDialog(
+        title = "Error",
+        "The excel file does not contain the correct columns. Please check the columns and try again.",
+        easyClose = TRUE
+      ))
+      return(NULL)
+    }
+    
+    if (nrow(excel_input) == 0) {
+      showModal(modalDialog(
+        title = "Error",
+        "The excel file is empty. Please check the file and try again.",
+        easyClose = TRUE
+      ))
+      return(NULL)
+    }
+
     processed_data(excel_input)
   })
   
   # split the processed data into numeric and character
   observeEvent(processed_data(),{
+    write.xlsx(processed_data(),'excel_input.xlsx')
     if(!is.null(processed_data())){
       
       df <- processed_data()
