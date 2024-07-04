@@ -380,7 +380,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   # split the processed data into numeric and character
   observeEvent(processed_data(),{
-    write.xlsx(processed_data(),'excel_input.xlsx')
+    # write.xlsx(processed_data(),'excel_input.xlsx')
     if(!is.null(processed_data())){
       
       df <- processed_data()
