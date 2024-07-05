@@ -148,7 +148,8 @@ ui <- fluidPage(
                  div(style = "height: 30px;"),
                  leaflet::leafletOutput("map_raion_numeric"),
                  div(style = "height: 30px;"),
-                 leaflet::leafletOutput("map_hromada_numeric")
+                 leaflet::leafletOutput("map_hromada_numeric"),
+                 width = 10
                )
              )
     ),
