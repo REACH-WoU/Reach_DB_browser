@@ -16,6 +16,7 @@ js <- c(
   "})"
 )
 
+palette_function <- colorRampPalette(c("#F4FBFE", "#DFECEF", "#BFDBE2", "#9FCACE", "#77B2BF", "#4096AA", "#27768A", "#0C596B", "#0C3842", "#0F2328"))
 
 shinyInput <- function(FUN, len, id, ...) {
   inputs <- character(len)
@@ -346,8 +347,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   # if the user has excel input let them use it here
   observeEvent(input$file, {
-    excel_input <- readxl::read_xlsx(input$file$datapath)
-    
+    excel_input <- openxlsx::read.xlsx(input$file$datapath)
     # check that excel file is valid
     columns.set <- c("ID", "admin", "admin_category", "option", "variable",
                      "disaggregations_category_1", "disaggregations_1",
@@ -588,11 +588,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                               font = list(color = '#000080', size = 12)),
                  xaxis = list(ticksuffix = "%", title = "", range = c(0,110),
                               automargin = TRUE),
-                 yaxis = list(title = "", automargin = TRUE),
+                 yaxis = list(title = "", automargin = TRUE, standoff = 15),  # Додаємо параметр standoff
                  margin = list(l = 100, r = 20, t = 50, b = 50),
                  height = 400,
                  showlegend = TRUE)
       })
+      
       
     }
     
@@ -683,30 +684,36 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       if (nrow(oblast_map) > 0) {
         output$map_oblast <- renderLeaflet({
           req(oblast_map)
-          mapview(oblast_map, zcol = "perc", map.types = c("CartoDB.Positron",
-                                                           "OpenStreetMap",
-                                                           "Esri.WorldImagery",
-                                                           "OpenTopoMap"))@map
+          mapview(oblast_map, zcol = "perc", layer.name = paste("Oblast map -", input$option, "option"),
+                  col.regions = palette_function(10),
+                  map.types = c("CartoDB.Positron",
+                                "OpenStreetMap",
+                                "Esri.WorldImagery",
+                                "OpenTopoMap"))@map
         })
       }
       
       if (nrow(raion_map) > 0) {
         output$map_raion <- renderLeaflet({
           req(raion_map)
-          mapview(raion_map, zcol = "perc", map.types = c("CartoDB.Positron",
-                                                          "OpenStreetMap",
-                                                          "Esri.WorldImagery",
-                                                          "OpenTopoMap"))@map
+          mapview(raion_map, zcol = "perc", layer.name = paste("Raion map -", input$option, "option"),
+                  col.regions = palette_function(10),
+                  map.types = c("CartoDB.Positron",
+                                "OpenStreetMap",
+                                "Esri.WorldImagery",
+                                "OpenTopoMap"))@map
         })
       }
       
       if (nrow(hromada_map) > 0) {
         output$map_hromada <- renderLeaflet({
           req(hromada_map)
-          mapview(hromada_map, zcol = "perc", map.types = c("CartoDB.Positron",
-                                                            "OpenStreetMap",
-                                                            "Esri.WorldImagery",
-                                                            "OpenTopoMap"))@map
+          mapview(hromada_map, zcol = "perc", layer.name = paste("Hromada map -", input$option, "option"),
+                  col.regions = palette_function(10),
+                  map.types = c("CartoDB.Positron",
+                                "OpenStreetMap",
+                                "Esri.WorldImagery",
+                                "OpenTopoMap"))@map
         })
       }
       
@@ -753,22 +760,14 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           !is.null(input$project_numeric)) {
         
         processed_numerics <- numeric_data()
-        
         filtered_df <- processed_numerics %>%
           filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
-                   disaggregations_category_1 %in% c(" Overall",'Overall'))
+                   disaggregations_category_1 %in% c(" Overall", 'Overall'))
         
         # basic stats
         basic_stat_number <- filtered_df %>% 
           filter(admin_category%in%c(' Overall','Overall')) %>% 
           pull(!!sym(input$option_numeric))
-        
-        
-        # output$numeric_text_1 <- renderText({paste0(
-        #   unique(filtered_df$variable),
-        #   '<br>',input$option_numeric,' of ',round(basic_stat_number,2)
-        # )
-        # })
         
         # disaggregation graph
         graph_base_n2 <- processed_numerics %>% 
@@ -787,7 +786,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         
         check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), c(' Overall','Overall'))
         
+        title_text = "Summary Statistics"
         if(length(check_categories)>0){
+          title_text = "Summary Statistics by Gender"
           graph_base_n2 <- graph_base_n2 %>% 
             filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
         }
@@ -822,12 +823,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                 font = list(size = 24)
               ),
               xaxis = list(
-                title = "Statistic",
                 titlefont = list(size = 18),
                 tickfont = list(size = 14)
               ),
               yaxis = list(
-                title = "Value",
                 titlefont = list(size = 18),
                 tickfont = list(size = 14)
               ),
@@ -861,30 +860,39 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         if (nrow(oblast_map_numeric) > 0) {
           output$map_oblast_numeric <- renderLeaflet({
             req(oblast_map_numeric)
-            mapview(oblast_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                                                   "OpenStreetMap",
-                                                                                   "Esri.WorldImagery",
-                                                                                   "OpenTopoMap"))@map
+            mapview(oblast_map_numeric, zcol = input$option_numeric, 
+                    layer.name = paste("Oblast map -", input$option_numeric, "statistic"),
+                    col.regions = palette_function(10), 
+                    map.types = c("CartoDB.Positron",
+                                  "OpenStreetMap",
+                                  "Esri.WorldImagery",
+                                  "OpenTopoMap"))@map
           })
         }
         
         if (nrow(raion_map_numeric) > 0) {
           output$map_raion_numeric <- renderLeaflet({
             req(raion_map_numeric)
-            mapview(raion_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                                                  "OpenStreetMap",
-                                                                                  "Esri.WorldImagery",
-                                                                                  "OpenTopoMap"))@map
+            mapview(raion_map_numeric, zcol = input$option_numeric,
+                    layer.name = paste("Raion map -", input$option_numeric, "statistic"),
+                    col.region = palette_function(10),
+                    map.types = c("CartoDB.Positron",
+                                  "OpenStreetMap",
+                                  "Esri.WorldImagery",
+                                  "OpenTopoMap"))@map
           })
         }
         
         if (nrow(hromada_map_numeric) > 0) {
           output$map_hromada_numeric <- renderLeaflet({
             req(hromada_map_numeric)
-            mapview(hromada_map_numeric, zcol = input$option_numeric, map.types = c("CartoDB.Positron",
-                                                                                    "OpenStreetMap",
-                                                                                    "Esri.WorldImagery",
-                                                                                    "OpenTopoMap"))@map
+            mapview(hromada_map_numeric, zcol = input$option_numeric, 
+                    layer.name = paste("Hromada map -", input$option_numeric, "statistic"),
+                    col.regions = palette_function(10),
+                    msp.types = c("CartoDB.Positron",
+                                  "OpenStreetMap",
+                                  "Esri.WorldImagery",
+                                  "OpenTopoMap"))@map
           })
         }
       }
@@ -905,7 +913,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                  disaggregations_category_1 %in% c(' Overall','Overall'),
                  admin %in% 'Overall')%>% 
           rowwise() %>% 
-          mutate(variable =paste(strwrap(variable, width = 35), collapse = "<br>"),
+          mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                  period_full = paste(month_conducted,TABLE_ID,variable,sep = '<br>'),
                  viz_variable = !!sym(input$option_numeric))
         
@@ -953,12 +961,10 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                 font = list(size = 24)
               ),
               xaxis = list(
-                title = "Variable",
                 titlefont = list(size = 18),
                 tickfont = list(size = 14)
               ),
               yaxis = list(
-                title = "Value",
                 titlefont = list(size = 18),
                 tickfont = list(size = 14)
               ),
