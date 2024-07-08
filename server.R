@@ -619,7 +619,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc)
       cnts <- round(cnts*100,0)
-      title <- paste0(graph_base3$variable, '<br>')
+      title <- graph_base3$variable
       # cut off the title if it is too long
       title <- substr(title, 1, 50)
       title <- paste0(title, '...')
@@ -631,21 +631,21 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           
           plot_ly(graph_base3, x = ~period_full, y = ~perc*100 , color = ~option, type = 'bar',
                   text = ~paste0(round(perc*100,1),'%'),
-                  textposition = 'outside',
-                  textfont =  list(size = 12,color = 'black')) %>%
+                  # textposition = 'auto',
+                  textfont =  list(size = 14,color = 'black')) %>%
             layout(barmode = 'stack', 
                    title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 12)),
+                                font = list(color = '#000080', size = 14)),
                    legend = list(x = 0, y = -0.2),
                    xaxis = list(title = ""),
                    yaxis = list(ticksuffix = "%",title = ""))
         }else{
           plot_ly(graph_base3, x = ~period_full, y = ~perc*100 , color = ~option, type = 'bar',
                   text = ~paste0(round(perc*100,1),'%'),
-                  textposition = 'outside',
-                  textfont =  list(size = 12,color = 'black')) %>%
+                  # textposition = 'auto',
+                  textfont =  list(size = 14,color = 'black')) %>%
             layout(title = list(text=paste0("<b>",title ,"</b>"),
-                                font = list(color = '#000080', size = 12)),
+                                font = list(color = '#000080', size = 14)),
                    xaxis = list(title = ""),
                    yaxis = list(ticksuffix = "%",title = ""))
           
@@ -948,8 +948,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
             x = ~period_full,
             y = ~value,
             color = ~statistic,
-            colors = c('mean' = 'green', 'max' = 'red', 
-                       'median' = 'orange', 'min' = 'blue'),
+            colors = c('mean' = '#40AB5D',  # Soft blue
+                       'max' = '#EE5859',   # Warm peach
+                       'median' = '#E9C46A',# Soft yellow
+                       'min' = '#4096AA'),   # Calm teal
+            
             type = 'bar',
             text = ~paste(statistic, ": ", value),
             hoverinfo = "text"
