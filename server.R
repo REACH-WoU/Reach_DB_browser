@@ -303,16 +303,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
     
-    # write.xlsx(DAF_template,'DAF_template.xlsx')
-    # write.xlsx(general_info,'general_info.xlsx')
-    
+    # write.xlsx(DAF_template, "daf.xlsx")
+    # write.xlsx(general_info, "gen_info.xlsx")
+
     json_body <- list(
       daf_file = DAF_template,
       info = general_info,
       filter = data.frame(
         TABLE_ID = as.character(),
+        ID = as.character(),
         variable = as.character(),
-        admin = as.character(),
+        operation = as.character(),
         value = as.character()
       )
     )
@@ -1215,13 +1216,34 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     daf <- requested_data %>%
       left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "Label::English")) %>%
-      dplyr::mutate(admin = admin_level, disaggregations = "empty", disaggregations_label = "Overall",
+      dplyr::mutate(adm_class = admin_level, disaggregations = "empty", disaggregations_label = "Overall",
                     join = NA, ID = 1:nrow(.), func = q.type.x, calculation = "empty",
                     DB_table_name = paste("data", Project_Round_Type, datasheet, "DCMPR", sep='_')) %>%
       dplyr::rename(TABLE_ID = Project_Round_Type, variable_label = english_question_label, variable = name, q.type = q.type.x) %>%
-      dplyr::select(TABLE_ID, ID, variable, variable_label, calculation, func, admin, disaggregations, disaggregations_label, q.type, join, datasheet, DB_table_name)
+      dplyr::select(TABLE_ID, ID, variable, variable_label, calculation, func, adm_class, disaggregations, disaggregations_label, q.type, join, datasheet, DB_table_name)
       
-      
+
+    admin_names <- c('oblast','raion','hromada','settlement')
+    
+    
+    # get the names of actual admin columns
+    admin_names_map <- dbGetQuery(my_connection , "SELECT TABLE_ID,representative_columns from data_representative_table") %>% 
+      mutate(representative_columns  = ifelse(representative_columns =='None',NA,representative_columns )) %>% 
+      rowwise() %>% 
+      mutate(adm_class = ifelse(!is.na(representative_columns),
+                                paste0(admin_names[1:(str_count(representative_columns,';')+1)],collapse = ';'),
+                                NA)) %>% 
+      ungroup()%>%
+      mutate(across(c(representative_columns, adm_class), ~strsplit(as.character(.), ";"))) %>%
+      unnest(c(representative_columns, adm_class)) %>%
+      filter(!is.na(representative_columns) & !is.na(adm_class)) %>% 
+      rename(admin = representative_columns)
+    
+    # merge into the DAF
+    daf <- daf %>% 
+      left_join(admin_names_map)
+  
+
     rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet from data_representative_table")
     
     general_info <- requested_data %>%
@@ -1232,8 +1254,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                     survey_type = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[1]],
                     main_sheet_name = paste("data", TABLE_ID, main_datasheet, "DCMPR", sep='_'))
     
+    
+    time_table <- as_tibble(hot_to_r(input$geo_table)) %>% 
+      mutate(TABLE_ID = paste0(Project,'_',Round,'_',Type))
+      
+    
     general_info <- general_info %>%
-      left_join(as_tibble(hot_to_r(input$geo_table)), by = c("project_ID" = "Project", "round_ID" = "Round", "survey_type" = "Type")) %>%
+      left_join(time_table, by = c("TABLE_ID" = "TABLE_ID")) %>%
       dplyr::mutate(round_ID =  gsub("[^0-9]", "", round_ID)) %>%
       dplyr::rename(month_conducted = Interview_date) %>%
       select(TABLE_ID, project_ID, round_ID, survey_type, month_conducted, main_sheet_name)
@@ -1255,21 +1282,35 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info$weight_column_name <- NA
     }
     
+    if(nrow(general_info[is.na(general_info$weight_column_name),])>0){
+      general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
+    }
     
     
     filter <- daf %>%
       dplyr::select(TABLE_ID, variable, admin) %>%
-      cross_join(intersections())
+      cross_join(intersections()) %>% 
+      left_join(daf %>% select(TABLE_ID,ID)) %>% 
+      select(TABLE_ID, admin, value) %>% 
+      mutate(operation = '=') %>% 
+      rename(adm_class = admin) %>% 
+      left_join(admin_names_map)
     
-    write.xlsx(daf, "daf.xlsx")
-    write.xlsx(general_info, "gen_info.xlsx")
-    write.xlsx(filter, "filter.xlsx")
+
+    daf$disaggregations <- 'Overall'
+    
+    # write.xlsx(daf, "daf_geo.xlsx")
+    # write.xlsx(general_info, "gen_info_geo.xlsx")
+    # write.xlsx(filter, "filter_geo.xlsx")
+
     
     json_body <- list(
       daf_file = daf,
-      info = general_info,
-      filter = filter
+      info = general_info
+      # ,
+      # filter = filter
     )
+    
     
     url <- Sys.getenv('url')
     
