@@ -308,7 +308,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     json_body <- list(
       daf_file = DAF_template,
-      info = general_info
+      info = general_info,
+      filter = data.frame(
+        TABLE_ID = as.character(),
+        variable = as.character(),
+        admin = as.character(),
+        value = as.character()
+      )
     )
     
     url <- Sys.getenv('url')
@@ -1275,7 +1281,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     df_final <- as.data.frame(do.call(cbind,df$result))
     
-    f <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
+    df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
     
     df <- df %>% 
       left_join(general_info %>% select(TABLE_ID,month_conducted))
