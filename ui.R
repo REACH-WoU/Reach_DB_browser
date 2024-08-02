@@ -1,4 +1,5 @@
 library(httr)
+library(purrr)
 library(data.table)
 library(DT)
 library(tidyr)
@@ -12,6 +13,15 @@ library(sf)
 library(leaflet)
 library(markdown)
 library(plotly)
+library(sf)
+library(rmapshaper)
+library(rhandsontable)
+
+sf_use_s2(FALSE)
+
+source('www/src/utils.R')
+source('www/src/get_db.R')
+source('www/src/load_data.R')
 
 
 # UI
@@ -24,7 +34,13 @@ ui <- fluidPage(
     tags$style(HTML(
       "#table-container {
           overflow: visible !important;
-        }"
+        }
+      #table-container {
+            overflow: visible !important;
+            }
+      .leaflet-container {
+        cursor: crosshair;
+      }"
     )),
     HTML(
       '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>'
@@ -35,29 +51,8 @@ ui <- fluidPage(
     ),
   ),
   
-  tabsetPanel(
-    # tabPanel('Read me',
-    #          # Sidebar layout with input and output definitions
-    #          column(12, 
-    #                 h3("General information"),
-    #                 span(htmlOutput("text_row1"), style = "font-size:20px;")
-    #          ),
-    #          column(6, 
-    #                 h3("Intra-project comparison"),
-    #                 span(htmlOutput("text_column1"), style = "font-size:20px;")
-    #          ),
-    #          column(6, 
-    #                 h3("Within-project comparison"),
-    #                 span(htmlOutput("text_column2"), style = "font-size:20px;")
-    #          ),
-    #          column(12, 
-    #                 h3("Available research cylces"),
-    #                 DTOutput("table1")
-    #          ),
-    #          div(style = "height: 20px;")
-    # ),
+  tabsetPanel(id = "tabs",
     tabPanel('Database request',
-             # Sidebar layout with input and output definitions
              sidebarLayout(
                sidebarPanel(
                  selectizeInput("project_search", "Select project:", choices = c(), multiple = FALSE, selected = 'Overall'),
@@ -103,18 +98,14 @@ ui <- fluidPage(
                  selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
                  selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
                  selectizeInput("option", "Select map z-col option:", choices = c(), multiple = FALSE),
-                 # div(style = "height: 30px;"),
-                 # selectizeInput("variable_orig_m", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
                  width = 2
                ),
                
-               # Main panel for displaying outputs
                mainPanel(
                  fluidRow(
                    column(6, plotly::plotlyOutput("graph_1_select")),
                    column(6, plotly::plotlyOutput("graph_2_select")),
                  ),
-                 # plotlyOutput("graph_3_select", height ='900px'),
                  div(style = "height: 50px;"),
                  leaflet::leafletOutput("map_oblast"),
                  div(style = "height: 30px;"),
@@ -132,17 +123,10 @@ ui <- fluidPage(
                  selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
                  selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
                  selectizeInput("option_numeric", "Select map z-col option:", choices = c(), multiple = FALSE),
-                 # div(style = "height: 30px;"),
-                 # selectizeInput("variable_orig_m_numeric", "Timeline selector, select multiple questions:", choices = c(), multiple = TRUE),
                  width = 2
                ),
                mainPanel(
-                 # div(htmlOutput("numeric_text_1")),
                  plotly::plotlyOutput("graph_1_numeric"),
-                 # fluidRow(column(6, div(htmlOutput("numeric_text_1"), 
-                 #                       style = "text-align: center; color: #000080; font-size: 20px;")),
-                 #          column(6, plotly::plotlyOutput("graph_1_numeric"))),
-                 # plotlyOutput("graph_2_numeric", height ='900px'),
                  div(style = "height: 50px;"),
                  leaflet::leafletOutput("map_oblast_numeric"),
                  div(style = "height: 30px;"),
@@ -182,6 +166,48 @@ ui <- fluidPage(
     tabPanel('Read me',
              includeMarkdown("README.md")
     ),
+    tabPanel('Observer',
+             sidebarLayout(
+               sidebarPanel(
+                 h5("Draw a polygon on the map to select the area of interest(polygon should have minimum 3 point)"),
+                 selectizeInput("geo_admin_level", "Select admin level", choices = c("oblast", "raion", "hromada"), multiple = FALSE, selected = "oblast"),
+                 conditionalPanel(
+                   condition = "input.geo_admin_level == 'hromada'",
+                   selectizeInput("geo_defined_oblast", "Specify oblasts", choices = c("Overall", oblasts$admin1Name_eng), multiple = TRUE, selected = c("Kyivska", "Kyiv city"))
+                 ),
+                 h5("Choose the topology relation:\n
+                      - 'intersects' - the geometries have at least one point in common
+                      - 'covers' -admin geometry is completely inside the drawn polygon"),
+                 selectizeInput("geo_relation_type", "Select topology relation", choices = c("intersects", "covers"), multiple = FALSE, selected = "intersects"),
+                 fluidRow(actionButton("geo_reset", "Reset Polygon"),
+                          actionButton("geo_get_info", "Get info"),
+                          conditionalPanel(
+                            condition = "output.geo_showGetButton",
+                            actionButton("geo_get_questions", "Get questions"),
+                          )
+                 ),
+                 width = 3
+               ),
+               mainPanel(
+                 leafletOutput("geo_map", height = "520px"),
+                 div(style = "height: 15px;"),
+                 rHandsontableOutput("geo_table"),
+                 width = 9
+               )
+             )
+    ),
+    tabPanel("Questions observer",
+             sidebarLayout(
+               sidebarPanel(
+                 uiOutput('geo_get_request'),
+                 width = 2
+               ),
+               mainPanel(
+                DTOutput("geo_questions_table"),
+                width = 10
+               )
+             )
+    )
   )
   
 )

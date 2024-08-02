@@ -16,6 +16,16 @@ js <- c(
   "})"
 )
 
+geo_js <- c(
+  "$('[id^=chec]').on('click', function(){",
+  "  var id = this.getAttribute('id');",
+  "  var i = parseInt(/chec(\\d+)/.exec(id)[1]);",
+  "  var value = $(this).prop('checked');",
+  "  var info = [{row: i, col: 9, value: value}];",
+  "  Shiny.setInputValue('geo_table_cell_edit:DT.cellInfo', info);",
+  "})"
+)
+
 palette_function <- colorRampPalette(c("#F4FBFE", "#DFECEF", "#BFDBE2", "#9FCACE", "#77B2BF", "#4096AA", "#27768A", "#0C596B", "#0C3842", "#0F2328"))
 
 shinyInput <- function(FUN, len, id, ...) {
@@ -25,9 +35,6 @@ shinyInput <- function(FUN, len, id, ...) {
   }
   inputs
 }
-
-source('www/src/get_db.R')
-source('www/src/load_data.R')
 
 server <- function(input, output, session) {
   
@@ -95,18 +102,6 @@ server <- function(input, output, session) {
     
     
     df_choices_added <- needed_data %>%
-      #   left_join(tool_choices %>% 
-      #               select(-c(order,load_time)) %>% 
-      #               rename(choice_name =name,
-      #                      english_choices = `Label::English` ,
-      #                      ukrainian_choices = `Label::Ukrainian`,
-      #                      russian_choices = `Label::Russian`
-      #               ) %>% 
-      #               group_by(TABLE_ID,list_name) %>% 
-      #               summarise(across(everything(), ~ paste0(.x, collapse=',\n'))) %>% 
-      #               ungroup() %>% 
-      #               mutate(list_name = str_squish(list_name))
-      #   ) %>% 
       left_join(tool_survey %>%
                   select(name, contains('Label'), TABLE_ID) %>%
                   rename(
@@ -201,9 +196,6 @@ server <- function(input, output, session) {
   
   observeEvent(ignoreInit = TRUE, input$process_request,{
     
-    # output$table <- renderDT({
-    #   return(NULL)
-    # })
     output$button2 <- renderUI({NULL})
     
     selected_frame <- Dat()
@@ -303,10 +295,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         easyClose = TRUE
       )
     )
-    # DAF_template<<-DAF_template
-    # general_info<<-general_info
-    
-    # save DAF_template and general_info as xlsx
     
     DAF_template[is.na(DAF_template$calculation),]$calculation <- 'empty'
     DAF_template[is.na(DAF_template$disaggregations),]$disaggregations <- 'empty'
@@ -980,138 +968,322 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
   
   
-  # observeEvent(input$project_id, {
-  #   project_rounds <- projects_data %>% 
-  #     filter(project_id == input$project_id) %>% 
-  #     pull(round)
-  #   
-  #   updateSelectizeInput(session, "round", choices = project_rounds)
-  # })
-  # 
-  # observeEvent(input$round, {
-  #   project_types <- projects_data %>% 
-  #     filter(project_id == input$project_id,
-  #            round == input$round) %>% 
-  #     pull(survey_type)
-  #   
-  #   updateSelectizeInput(session, "survey_type", choices = project_types)
-  # })
-  # 
-  # observeEvent(input$check_representation_levels, {
-  # 
-  #   if (!is.null(input$project_id) & !is.null(input$round) & !is.null(input$survey_type)) {
-  #     
-  #     updateSelectizeInput(session, "representation_level", choices = c())
-  #     
-  #     representation_levels <- projects_data %>% 
-  #       filter(project_id == input$project_id,
-  #              round == input$round,
-  #              survey_type == input$survey_type) %>% 
-  #       dplyr::select(oblast, raion, hromada, settlement)
-  #     
-  #     if (nrow(representation_levels) > 1) {
-  #       1
-  #     }
-  #     representative_choices <- c()
-  #     if (!is.na(representation_levels$oblast[1]) & representation_levels$oblast[1] != "") {
-  #       representative_choices <- c(representative_choices, "oblast")
-  #     }
-  #     
-  #     if (!is.na(representation_levels$raion[1]) & representation_levels$raion[1] != "") {
-  #       representative_choices <- c(representative_choices, "raion")
-  #     }
-  #     
-  #     if (!is.na(representation_levels$hromada[1]) & representation_levels$hromada[1] != "") {
-  #       representative_choices <- c(representative_choices, "hromada")
-  #     }
-  #     
-  #     if (!is.na(representation_levels$settlement[1]) & representation_levels$settlement[1] != "") {
-  #       representative_choices <- c(representative_choices, "settlement")
-  #     }
-  #     
-  #     if (length(representative_choices) == 0) {
-  #       updateSelectizeInput(session, "representation_level", choices = c("No representative levels"))
-  #     } else {
-  #       updateSelectizeInput(session, "representation_level", choices = representative_choices)
-  #     }
-  #   }
-  # 
-  # })
-  # 
-  # observeEvent(input$draw_map, {
-  #   if (!is.null(input$representation_level)) {
-  #     
-  #     if (input$representation_level == "No representative levels") {
-  #       output$map <- renderLeaflet({
-  #         leaflet() %>%
-  #           addProviderTiles(providers$CartoDB.Positron) %>%
-  #           setView(lng = 31.1656, lat = 48.3794, zoom = 6) %>%
-  #           addLabelOnlyMarkers(
-  #             lng = 31.1656, lat = 48.3794, 
-  #             label = "NO DATA", 
-  #             labelOptions = labelOptions(
-  #               noHide = TRUE, 
-  #               direction = 'top', 
-  #               textOnly = TRUE,
-  #               style = list(
-  #                 "color" = "red", 
-  #                 "font-size" = "16px",
-  #                 "font-weight" = "bold"
-  #               )
-  #             )
-  #           )
-  #       })
-  #       return()
-  #     }
-  #     
-  #     geodata <- projects_data %>% 
-  #       dplyr::filter(project_id == input$project_id,
-  #              round == input$round,
-  #              survey_type == input$survey_type) %>%
-  #       pull(!!sym(input$representation_level)) %>%
-  #       strsplit(";") %>%
-  #       unlist()
-  #     
-  #     if (input$representation_level == "oblast") {
-  # map_data <- oblast_json %>%
-  #   dplyr::filter(ADM1_PCODE %in% geodata)
-  #     } else if (input$representation_level == "raion") {
-  #       map_data <- raion_json %>%
-  #         filter(ADM2_PCODE %in% geodata)
-  #     } else if (input$representation_level == "hromada") {
-  #       map_data <- hromada_json %>%
-  #         filter(ADM3_PCODE %in% geodata)
-  #     } else if (input$representation_level == "settlement") {
-  #       map_data <- settlement_json %>%
-  #         filter(ADM4_PCODE %in% geodata)
-  #     }
-  #     
-  # output$map <- renderLeaflet({
-  #   req(map_data)
-  #   mapview(map_data)@map
-  # })
-  #     
-  #   }
-  # })
-  # 
-  # observeEvent(input$addMaps, {
-  #   output$mapsUI <- renderUI({
-  #     numMaps <- input$numMaps
-  #     map_outputs <- lapply(1:numMaps, function(i) {
-  #       leafletOutput(paste0("map", i))
-  #     })
-  #     do.call(tagList, map_outputs)
-  #   })
-  #   
-  #   lapply(1:input$numMaps, function(i) {
-  #     output[[paste0("map", i)]] <- renderLeaflet({
-  #       leaflet() %>%
-  #         addTiles() %>%
-  #         setView(lng = -93.65, lat = 42.0285, zoom = 4)
-  #     })
-  #   })
-  # })
+  ################################## GEO PART ##################################
   
+  points <- reactiveVal(data.frame(lng = numeric(0), lat = numeric(0)))
+  admin_map = reactiveVal()
+  info_table = reactiveVal()
+  
+  observeEvent(input$geo_admin_level,{
+    admin_map(switch(input$geo_admin_level,
+                     "oblast" = oblast_json,
+                     "raion" = raion_json,
+                     "hromada" = hromada_json))
+    
+    if (input$geo_admin_level == "hromada") {
+      if ("Overall" %in% input$geo_defined_oblast) {
+        admin_map(hromada_json)
+      } else {
+        oblast_row <- oblasts[oblasts$admin1Name_eng %in% input$geo_defined_oblast, ]
+        admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+      }
+    }
+    points(data.frame(lng = numeric(0), lat = numeric(0)))
+    
+    ### reset question table and info table
+    output$geo_table <- renderRHandsontable({
+      NULL
+    })
+    
+    info_table(NULL)
+    
+    output$geo_questions_table <- renderDT({
+      NULL
+    })
+  })
+  
+  observeEvent(input$geo_defined_oblast, {
+    if (input$geo_admin_level != "hromada") {
+      return()
+    }
+    if ("Overall" %in% input$geo_defined_oblast) {
+      admin_map(hromada_json)
+    } else {
+      oblast_row <- oblasts[oblasts$admin1Name_eng %in% input$geo_defined_oblast, ]
+      admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+    }
+    points(data.frame(lng = numeric(0), lat = numeric(0)))
+    
+    ### reset question table and info table
+    output$geo_table <- renderRHandsontable({
+      NULL
+    })
+    
+    info_table(NULL)
+    
+    output$geo_questions_table <- renderDT({
+      NULL
+    })
+  })
+  
+  
+  output$geo_map <- renderLeaflet({
+    if (is.null(admin_map())) {
+      return()
+    }
+    leaflet() %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      addTiles() %>%
+      setView(lng = 31.1656, lat = 48.3794, zoom =6)
+  })
+  
+  observeEvent(input$geo_map_click, {
+    click <- input$geo_map_click
+    new_point <- data.frame(lng = click$lng, lat = click$lat)
+    points(rbind(points(), new_point))
+    
+    current_points <- points()
+    
+    leafletProxy("geo_map") %>%
+      clearShapes() %>%
+      addPolygons(lng = current_points$lng, lat = current_points$lat, color = "red", fill = TRUE, fillColor = "red", weight = 4) %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      addMarkers(lng = current_points$lng, lat = current_points$lat)
+  })
+  
+  observeEvent(input$geo_reset, {
+    points(data.frame(lng = numeric(0), lat = numeric(0)))
+    
+    leafletProxy("geo_map") %>%
+      clearShapes() %>%
+      clearMarkers() %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      setView(lng = 31.1656, lat = 48.3794, zoom = 6)
+    
+    ### reset question table and info table
+    output$geo_table <- renderRHandsontable({
+      NULL
+    })
+    
+    info_table(NULL)
+    
+    output$geo_questions_table <- renderDT({
+      NULL
+    })
+    
+  })
+  intersections <- reactiveVal()
+  observeEvent(input$geo_get_info, {
+    if (nrow(points()) > 2) {
+      closed_points <- rbind(
+        data.frame(lng = points()$lng, lat = points()$lat),
+        data.frame(lng = points()$lng[1], lat = points()$lat[1])
+      )
+      polygon <- st_sfc(st_polygon(list(as.matrix(closed_points))), crs = 4326)
+      if (st_is_valid(polygon)) {
+        admin_map_planar <- st_transform(admin_map(), 3857)
+        polygon_planar <- st_transform(polygon, 3857)
+        if (input$geo_relation_type == "covers") {
+          intersections_admin <- admin_map()[unlist(st_covers(polygon_planar, admin_map_planar)), ]
+        } else if (input$geo_relation_type == "intersects") {
+          intersections_admin <- admin_map()[unlist(st_intersects(polygon_planar, admin_map_planar)), ]
+        }
+        admin_column <- switch(input$geo_admin_level,
+                               "oblast" = "ADM1_PCODE",
+                               "raion" = "ADM2_PCODE",
+                               "hromada" = "ADM3_PCODE")
+        
+        
+        representation_data_filtered <- representation_data %>%
+          dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
+          dplyr::select(c("Name", "Project", "Round", "Type", "Interview_date")) %>%
+          dplyr::mutate(Get_info = FALSE)
+        
+        intersections(data.frame(
+          "value" = intersections_admin[[admin_column]]
+        ))
+        
+        # sort representation_data_filtered by Project
+        representation_data_filtered <- representation_data_filtered[order(representation_data_filtered$Project),]
+        output$geo_table <- renderRHandsontable({
+          rhandsontable(
+            representation_data_filtered,
+            rowHeaders = NULL,
+            width = "1000px",
+            readOnly = TRUE
+          ) %>%
+            hot_col("Get_info", readOnly = FALSE, valign = 'htCenter') %>%
+            hot_col("Interview_date", valign = 'htCenter') %>%
+            hot_col("Round", valign = 'htCenter') %>%
+            hot_cols(colWidths = c(310, 160, 110, 160, 160, 100))
+        })
+      }
+    }
+  })
+  
+  observeEvent(input$geo_table, {
+    info_table(hot_to_r(input$geo_table))
+  })
+  
+  showGetButton <- reactive({
+    if (!is.null(info_table())) {
+      user_data <- info_table()
+      if (sum(user_data$Get_info) > 0) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }
+    return(FALSE)
+  })
+  
+  output$geo_showGetButton <- reactive({
+    showGetButton()
+  })
+  
+  outputOptions(output, "geo_showGetButton", suspendWhenHidden = FALSE)
+  
+  
+  observeEvent(input$geo_get_questions, {
+    
+    user_data <- as_tibble(hot_to_r(input$geo_table)) %>%
+      dplyr::filter(Get_info == TRUE)
+    user_data$TABLE_ID <- paste(user_data$Project, user_data$Round, user_data$Type, sep = "_")
+    table_Ids <- unique(user_data$TABLE_ID)
+    
+    question.table <- get.questions(table_Ids) %>%
+      dplyr::rename(Project_Round_Type = TABLE_ID, "english_question_label" = english_question, "ukrainian_question_label" = ukrainian_question)
+    
+
+    question.table <- cbind(question.table, check = shinyInput(checkboxInput, nrow(question.table), "chec"))
+    
+    output$geo_questions_table <- renderDT({
+      
+      datatable(question.table,
+                filter = "top",
+                selection = 'none',
+                rownames = FALSE,
+                escape = FALSE,
+                editable = list(target = "cell", disable = list(columns = 8)),
+                callback = JS(geo_js),
+                options = list(
+                  pageLength = 20,
+                  autoWidth = TRUE
+                  )) %>%
+        formatStyle(
+          columns = names(question.table),
+          valueColumns = NULL,
+          target = 'cell',
+          backgroundColor = styleEqual(NA, 'white'),
+          border = '1px solid black'
+        )
+    }, server = FALSE)
+    updateTabsetPanel(session, inputId = "tabs", selected = "Questions observer")
+    
+    question_table.reactive(cbind(question.table, bool = FALSE))
+  })
+  
+  question_table.reactive <- reactiveVal()
+  
+  observeEvent(input$geo_table_cell_edit, {
+    info <- input$geo_table_cell_edit
+    question_table.reactive(editData(question_table.reactive(), info))
+
+    if (any(question_table.reactive()$bool)) {
+      output$geo_get_request <- renderUI({
+        actionButton("geo_get_request", "Get request")
+      })
+    } else {
+      output$geo_get_request <- renderUI({
+        NULL
+      })
+    }
+  })
+  
+  observeEvent(input$geo_get_request, {
+    
+    requested_data <- question_table.reactive() %>%
+      dplyr::filter(bool == TRUE)
+    
+    admin_level <- input$geo_admin_level
+    
+    daf <- requested_data %>%
+      left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "Label::English")) %>%
+      dplyr::mutate(admin = admin_level, disaggregations = "empty", disaggregations_label = "Overall",
+                    join = NA, ID = 1:nrow(.), func = q.type.x, calculation = "empty",
+                    DB_table_name = paste("data", Project_Round_Type, datasheet, "DCMPR", sep='_')) %>%
+      dplyr::rename(TABLE_ID = Project_Round_Type, variable_label = english_question_label, variable = name, q.type = q.type.x) %>%
+      dplyr::select(TABLE_ID, ID, variable, variable_label, calculation, func, admin, disaggregations, disaggregations_label, q.type, join, datasheet, DB_table_name)
+      
+      
+    rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet from data_representative_table")
+    
+    general_info <- requested_data %>%
+      left_join(rep_table_overview, by = c("Project_Round_Type" = "TABLE_ID")) %>%
+      dplyr::rename(TABLE_ID = Project_Round_Type) %>%
+      dplyr::mutate(project_ID = get.project.name(TABLE_ID),
+                    round_ID = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[2]],
+                    survey_type = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[1]],
+                    main_sheet_name = paste("data", TABLE_ID, main_datasheet, "DCMPR", sep='_'))
+    
+    general_info <- general_info %>%
+      left_join(as_tibble(hot_to_r(input$geo_table)), by = c("project_ID" = "Project", "round_ID" = "Round", "survey_type" = "Type")) %>%
+      dplyr::mutate(round_ID =  gsub("[^0-9]", "", round_ID)) %>%
+      dplyr::rename(month_conducted = Interview_date) %>%
+      select(TABLE_ID, project_ID, round_ID, survey_type, month_conducted, main_sheet_name)
+    
+    weight_table <-  dbGetQuery(my_connection , paste0(
+      "SELECT TABLE_NAME, COLUMN_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="','")  ,"')"))
+    
+    weight_table <- weight_table %>% 
+      filter(grepl('weight',COLUMN_NAME)) %>% 
+      rename(main_sheet_name =TABLE_NAME,
+             weight_column_name = COLUMN_NAME)
+    
+    if (nrow(weight_table) > 0){
+      general_info <- general_info %>% 
+        left_join(weight_table)
+    } else {
+      general_info$weight_column_name <- NA
+    }
+    
+    
+    
+    filter <- daf %>%
+      dplyr::select(TABLE_ID, variable, admin) %>%
+      cross_join(intersections())
+    
+    write.xlsx(daf, "daf.xlsx")
+    write.xlsx(general_info, "gen_info.xlsx")
+    write.xlsx(filter, "filter.xlsx")
+    
+    json_body <- list(
+      daf_file = daf,
+      info = general_info,
+      filter = filter
+    )
+    
+    url <- Sys.getenv('url')
+    
+    response <- POST(url, body = json_body, encode = "json")
+    print(status_code(response))
+    
+    char <- rawToChar(response$content)
+    df <- fromJSON(char)
+    
+    df_final <- as.data.frame(do.call(cbind,df$result))
+    
+    f <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
+    
+    df <- df %>% 
+      left_join(general_info %>% select(TABLE_ID,month_conducted))
+    
+    
+    removeModal()
+    processed_data(df)
+  })
 }
 
 

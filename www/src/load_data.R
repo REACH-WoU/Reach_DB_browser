@@ -18,7 +18,7 @@ exec sp_executesql @sql
 ") %>% 
   mutate(value = substr(value,1,10),
          value = as.Date(value,format="%Y-%m-%d"),
-         value = format(value, "%Y-%m"))
+         value = format(value, "%Y-%m"), Interview_date = value)
 
 
 database_project <- dbGetQuery(my_connection , "SELECT * from Reach_QDB;")
@@ -57,9 +57,27 @@ rep_table <- rep_table %>%
 
 # create sf dataframe with 1 point in Kiyv and lable "No Data"
 
+representation_data <- dbGetQuery(my_connection , "SELECT * FROM [representative_columns_table]") %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(oblast = stringr::str_split(oblast, ";"),
+                raion = stringr::str_split(raion, ";"),
+                hromada = stringr::str_split(hromada, ";")) %>%
+  dplyr::mutate(Project = get.project.name(TABLE_ID),
+                Round = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[2]],
+                Type = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[1]]) %>%
+  ungroup()
+
+research_cycles <- dbGetQuery(my_connection , "SELECT Research_cycle_ID, Name FROM [Research_cycle_db];")
+
+representation_data <- representation_data %>%
+  dplyr::left_join(research_cycles, by = c("Project" = "Research_cycle_ID")) %>%
+  dplyr::left_join(time_tbl, by = c("TABLE_ID" = "TABLE_ID"))
+
 oblast_json <- st_read("www/geodata/Oblasts.geojson")
-raion_json <- st_read("www/geodata/Raions.geojson")
-hromada_json <- st_read("www/geodata/Hromadas.geojson")
+raion_json <- st_read("www/geodata/Raions_simplified.geojson")
+hromada_json <- st_cast(st_read("www/geodata/Hromadas.geojson"), "MULTIPOLYGON")
+
+hromada_json <- ms_simplify(hromada_json, keep = 0.2, keep_shapes = TRUE)
 
 
 query <- "SELECT * FROM [dbo].[representative_columns_table];"
@@ -73,5 +91,9 @@ projects_data <- projects_data %>%
     project_id = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 1),
     round = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 2),
     survey_type = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 3))
+
+############### GEO PART
+
+
 
 
