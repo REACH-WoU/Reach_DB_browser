@@ -379,7 +379,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     if(!is.null(processed_data())){
       
       df <- processed_data()
-
+      testo<<- df
       if ("mean" %in% colnames(df)) {
         print("mean")
         numeric <- df %>%
@@ -1220,7 +1220,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     daf <- requested_data %>%
       left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "Label::English")) %>%
-      dplyr::mutate(adm_class = admin_level, disaggregations = "empty", disaggregations_label = "Overall",join = NA, 
+      dplyr::mutate(adm_class = admin_level, disaggregations = "Overall", disaggregations_label = "Overall",join = NA, 
                     ID = 1:nrow(.), func = case_when(
                       q.type.x %in% c('select_one','select_multiple') ~ 'freq',
                       q.type.x %in% c('integer','decimal') ~ 'numeric',
@@ -1249,8 +1249,15 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     # merge into the DAF
     daf <- daf %>% 
-      left_join(admin_names_map)
+      left_join(admin_names_map) %>% 
+      mutate(admin_var = admin)
   
+    daf <- rbind(daf,daf %>% 
+      distinct() %>% 
+      mutate(disaggregations='empty',
+             admin ='Overall')) %>% 
+      mutate(ID = 1:nrow(.))
+    
 
     rep_table_overview <-  dbGetQuery(my_connection , "SELECT TABLE_ID,datasheet_names,main_datasheet from data_representative_table")
     
@@ -1294,30 +1301,22 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
     
-    # 
-    # testo <<- intersections()
-    # daf<<-daf
-    
+
     filter <- daf %>%
-      dplyr::select(ID, TABLE_ID, variable, admin) %>%
-      cross_join(intersections()) %>% 
-      left_join(daf %>% select(TABLE_ID,ID)) %>% 
-      select(ID,TABLE_ID, admin, value) %>% 
+      dplyr::select(ID, TABLE_ID, admin_var) %>%
+      cross_join( intersections()) %>% 
       mutate(operation = '==') %>% 
-      rename(adm_class = admin) %>% 
-      left_join(admin_names_map) %>% 
-      select(-(admin)) %>% 
-      rename(variable = adm_class)
+      rename(variable = admin_var)
     
 
-    daf$disaggregations <- 'Overall'
+    # daf$disaggregations <- 'Overall'
     
     # write.xlsx(daf, "daf_geo.xlsx")
     # write.xlsx(general_info, "gen_info_geo.xlsx")
     # write.xlsx(filter, "filter_geo.xlsx")
 
     
-    json_body <- list(
+    json_body <<- list(
       daf_file = daf,
       info = general_info,
       filter = filter
@@ -1338,7 +1337,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
     
     df <- df %>% 
-      left_join(general_info %>% select(TABLE_ID,month_conducted))
+      left_join(general_info %>% select(TABLE_ID,month_conducted) %>% distinct())
     
     print(unique(df$admin_category))
     
