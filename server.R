@@ -1174,7 +1174,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                 editable = list(target = "cell", disable = list(columns = 8)),
                 callback = JS(geo_js),
                 options = list(
-                  pageLength = 20,
+                  pageLength = nrow(question.table),
                   autoWidth = TRUE
                   )) %>%
         formatStyle(
@@ -1213,11 +1213,19 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       dplyr::filter(bool == TRUE)
     
     admin_level <- input$geo_admin_level
+    # 
+    # requested_data<<-requested_data
+    # tool_survey<<-tool_survey
+    # print(requested_data)
     
     daf <- requested_data %>%
       left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "Label::English")) %>%
-      dplyr::mutate(adm_class = admin_level, disaggregations = "empty", disaggregations_label = "Overall",
-                    join = NA, ID = 1:nrow(.), func = q.type.x, calculation = "empty",
+      dplyr::mutate(adm_class = admin_level, disaggregations = "empty", disaggregations_label = "Overall",join = NA, 
+                    ID = 1:nrow(.), func = case_when(
+                      q.type.x %in% c('select_one','select_multiple') ~ 'freq',
+                      q.type.x %in% c('integer','decimal') ~ 'numeric',
+                      .default = 'freq'),
+                    calculation = "empty",
                     DB_table_name = paste("data", Project_Round_Type, datasheet, "DCMPR", sep='_')) %>%
       dplyr::rename(TABLE_ID = Project_Round_Type, variable_label = english_question_label, variable = name, q.type = q.type.x) %>%
       dplyr::select(TABLE_ID, ID, variable, variable_label, calculation, func, adm_class, disaggregations, disaggregations_label, q.type, join, datasheet, DB_table_name)
@@ -1286,15 +1294,20 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
     
+    # 
+    # testo <<- intersections()
+    # daf<<-daf
     
     filter <- daf %>%
-      dplyr::select(TABLE_ID, variable, admin) %>%
+      dplyr::select(ID, TABLE_ID, variable, admin) %>%
       cross_join(intersections()) %>% 
       left_join(daf %>% select(TABLE_ID,ID)) %>% 
-      select(TABLE_ID, admin, value) %>% 
-      mutate(operation = '=') %>% 
+      select(ID,TABLE_ID, admin, value) %>% 
+      mutate(operation = '==') %>% 
       rename(adm_class = admin) %>% 
-      left_join(admin_names_map)
+      left_join(admin_names_map) %>% 
+      select(-(admin)) %>% 
+      rename(variable = adm_class)
     
 
     daf$disaggregations <- 'Overall'
@@ -1306,11 +1319,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     json_body <- list(
       daf_file = daf,
-      info = general_info
-      # ,
-      # filter = filter
+      info = general_info,
+      filter = filter
     )
     
+    # testo<<-json_body
     
     url <- Sys.getenv('url')
     
@@ -1327,6 +1340,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     df <- df %>% 
       left_join(general_info %>% select(TABLE_ID,month_conducted))
     
+    print(unique(df$admin_category))
     
     removeModal()
     processed_data(df)
