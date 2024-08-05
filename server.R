@@ -1086,45 +1086,61 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         data.frame(lng = points()$lng, lat = points()$lat),
         data.frame(lng = points()$lng[1], lat = points()$lat[1])
       )
-      polygon <- st_sfc(st_polygon(list(as.matrix(closed_points))), crs = 4326)
-      if (st_is_valid(polygon)) {
-        admin_map_planar <- st_transform(admin_map(), 3857)
-        polygon_planar <- st_transform(polygon, 3857)
-        if (input$geo_relation_type == "covers") {
-          intersections_admin <- admin_map()[unlist(st_covers(polygon_planar, admin_map_planar)), ]
-        } else if (input$geo_relation_type == "intersects") {
-          intersections_admin <- admin_map()[unlist(st_intersects(polygon_planar, admin_map_planar)), ]
-        }
-        admin_column <- switch(input$geo_admin_level,
-                               "oblast" = "ADM1_PCODE",
-                               "raion" = "ADM2_PCODE",
-                               "hromada" = "ADM3_PCODE")
-        
-        
-        representation_data_filtered <- representation_data %>%
-          dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
-          dplyr::select(c("Name", "Project", "Round", "Type", "Interview_date")) %>%
-          dplyr::mutate(Get_info = FALSE)
-        
-        intersections(data.frame(
-          "value" = intersections_admin[[admin_column]]
-        ))
-        
-        # sort representation_data_filtered by Project
-        representation_data_filtered <- representation_data_filtered[order(representation_data_filtered$Project),]
-        output$geo_table <- renderRHandsontable({
-          rhandsontable(
-            representation_data_filtered,
-            rowHeaders = NULL,
-            width = "1000px",
-            readOnly = TRUE
-          ) %>%
-            hot_col("Get_info", readOnly = FALSE, valign = 'htCenter') %>%
-            hot_col("Interview_date", valign = 'htCenter') %>%
-            hot_col("Round", valign = 'htCenter') %>%
-            hot_cols(colWidths = c(310, 160, 110, 160, 160, 100))
-        })
+      geometry <- st_sfc(st_polygon(list(as.matrix(closed_points))), crs = 4326)
+    }
+    
+    if (nrow(points()) == 2) {
+      closed_points <- rbind(
+        data.frame(lng = points()$lng, lat = points()$lat)
+      )
+      geometry <- st_sfc(st_linestring(as.matrix(closed_points)), crs = 4326)
+    }
+    
+    if (nrow(points()) == 1) {
+      closed_points <- rbind(
+        data.frame(lng = points()$lng, lat = points()$lat)
+      )
+      geometry <- st_sfc(st_point(as.matrix(closed_points)), crs = 4326)
+    }
+    
+    
+    if (st_is_valid(geometry)) {
+      admin_map_planar <- st_transform(admin_map(), 3857)
+      geometry_planar <- st_transform(geometry, 3857)
+      if (input$geo_relation_type == "covers") {
+        intersections_admin <- admin_map()[unlist(st_covers(geometry_planar, admin_map_planar)), ]
+      } else if (input$geo_relation_type == "intersects") {
+        intersections_admin <- admin_map()[unlist(st_intersects(geometry_planar, admin_map_planar)), ]
       }
+      admin_column <- switch(input$geo_admin_level,
+                             "oblast" = "ADM1_PCODE",
+                             "raion" = "ADM2_PCODE",
+                             "hromada" = "ADM3_PCODE")
+      
+      
+      representation_data_filtered <- representation_data %>%
+        dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
+        dplyr::select(c("Name", "Project", "Round", "Type", "Interview_date")) %>%
+        dplyr::mutate(Get_info = FALSE)
+      
+      intersections(data.frame(
+        "value" = intersections_admin[[admin_column]]
+      ))
+      
+      # sort representation_data_filtered by Project
+      representation_data_filtered <- representation_data_filtered[order(representation_data_filtered$Project),]
+      output$geo_table <- renderRHandsontable({
+        rhandsontable(
+          representation_data_filtered,
+          rowHeaders = NULL,
+          width = "1000px",
+          readOnly = TRUE
+        ) %>%
+          hot_col("Get_info", readOnly = FALSE, valign = 'htCenter') %>%
+          hot_col("Interview_date", valign = 'htCenter') %>%
+          hot_col("Round", valign = 'htCenter') %>%
+          hot_cols(colWidths = c(310, 160, 110, 160, 160, 100))
+      })
     }
   })
   

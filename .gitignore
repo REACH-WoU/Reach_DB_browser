@@ -3,3 +3,7 @@
 .RData
 .Ruserdata
 *.xlsx
+/www/geodata/Hromadas.geojson
+/www/geodata/Oblasts.geojson
+/www/geodata/Raions_simplified.geojson
+/www/geodata/Raions.geojson
