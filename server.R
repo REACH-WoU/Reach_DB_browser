@@ -443,10 +443,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         )
       }
       
-      
       numeric_data(numeric)
       select_data(select)
-
       
       projects_numeric <- unique(numeric$TABLE_ID)
       projects_select <- unique(select$TABLE_ID)
@@ -1067,8 +1065,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     if (is.null(admin_map())) {
       return()
     }
+    
+    labelName <- switch(input$geo_admin_level,
+                        "oblast" = "ADM1_EN",
+                        "raion" = "ADM2_EN",
+                        "hromada" = "ADM3_EN",
+                        "settlement" = "ADM4_EN")
+    
+    labels <- admin_map()[[labelName]]
+    
     leaflet() %>%
-      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1, label = labels) %>%
       addTiles() %>%
       setView(lng = 31.1656, lat = 48.3794, zoom =6)
   })
@@ -1080,20 +1087,35 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     current_points <- points()
     
+    labelName <- switch(input$geo_admin_level,
+                        "oblast" = "ADM1_EN",
+                        "raion" = "ADM2_EN",
+                        "hromada" = "ADM3_EN",
+                        "settlement" = "ADM4_EN")
+    
+    labels <- admin_map()[[labelName]]
+    
     leafletProxy("geo_map") %>%
       clearShapes() %>%
       addPolygons(lng = current_points$lng, lat = current_points$lat, color = "red", fill = TRUE, fillColor = "red", weight = 4) %>%
-      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1, label = labels) %>%
       addMarkers(lng = current_points$lng, lat = current_points$lat)
   })
   
   observeEvent(input$geo_reset, {
     points(data.frame(lng = numeric(0), lat = numeric(0)))
     
+    labelName <- switch(input$geo_admin_level,
+                        "oblast" = "ADM1_EN",
+                        "raion" = "ADM2_EN",
+                        "hromada" = "ADM3_EN",
+                        "settlement" = "ADM4_EN")
+    labels <- admin_map()[[labelName]]
+    
     leafletProxy("geo_map") %>%
       clearShapes() %>%
       clearMarkers() %>%
-      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1) %>%
+      addPolygons(data = admin_map(), color = "#4096AA", fill = TRUE, fillColor = "#4096AA", fillOpacity = 0.2, weight = 1, label = labels) %>%
       setView(lng = 31.1656, lat = 48.3794, zoom = 6)
     
     ### reset question table and info table
@@ -1146,7 +1168,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                              "raion" = "ADM2_PCODE",
                              "hromada" = "ADM3_PCODE",
                              "settlement" = "ADM4_PCODE")
-      print(intersections_admin[[admin_column]])
       
       representation_data_filtered <- representation_data %>%
         dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
