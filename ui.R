@@ -169,10 +169,10 @@ ui <- fluidPage(
     tabPanel('Observer',
              sidebarLayout(
                sidebarPanel(
-                 h5("Draw a polygon on the map to select the area of interest(polygon should have minimum 3 point)"),
-                 selectizeInput("geo_admin_level", "Select admin level", choices = c("oblast", "raion", "hromada"), multiple = FALSE, selected = "oblast"),
+                 h5("Draw a polygon on the map to select the area of interest"),
+                 selectizeInput("geo_admin_level", "Select admin level", choices = c("oblast", "raion", "hromada", "settlement"), multiple = FALSE, selected = "oblast"),
                  conditionalPanel(
-                   condition = "input.geo_admin_level == 'hromada'",
+                   condition = "input.geo_admin_level == 'hromada' | input.geo_admin_level == 'settlement'",
                    selectizeInput("geo_defined_oblast", "Specify oblasts", choices = c("Overall", oblasts$admin1Name_eng), multiple = TRUE, selected = c("Kyivska", "Kyiv city"))
                  ),
                  h5("Choose the topology relation:\n

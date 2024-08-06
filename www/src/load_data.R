@@ -61,7 +61,8 @@ representation_data <- dbGetQuery(my_connection , "SELECT * FROM [representative
   dplyr::rowwise() %>%
   dplyr::mutate(oblast = stringr::str_split(oblast, ";"),
                 raion = stringr::str_split(raion, ";"),
-                hromada = stringr::str_split(hromada, ";")) %>%
+                hromada = stringr::str_split(hromada, ";"),
+                settlement = stringr::str_split(settlement, ";")) %>%
   dplyr::mutate(Project = get.project.name(TABLE_ID),
                 Round = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[2]],
                 Type = rev(unlist(stringr::str_split(TABLE_ID, "_")))[[1]]) %>%
@@ -76,9 +77,13 @@ representation_data <- representation_data %>%
 oblast_json <- st_read("www/geodata/Oblasts.geojson")
 raion_json <- st_read("www/geodata/Raions_simplified.geojson")
 hromada_json <- st_cast(st_read("www/geodata/Hromadas.geojson"), "MULTIPOLYGON")
+settlement_json <- st_cast(st_read("www/geodata/Settlements_simplified.geojson"), "MULTIPOLYGON")
 
 hromada_json <- ms_simplify(hromada_json, keep = 0.2, keep_shapes = TRUE)
+# settlement_json <- ms_simplify(settlement_json, keep = 0.08, keep_shapes = TRUE)
 
+# write settlements to file
+# st_write(settlement_json, "www/geodata/Settlements_simplified.geojson")
 
 query <- "SELECT * FROM [dbo].[representative_columns_table];"
 

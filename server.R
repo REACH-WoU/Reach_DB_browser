@@ -985,14 +985,25 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     admin_map(switch(input$geo_admin_level,
                      "oblast" = oblast_json,
                      "raion" = raion_json,
-                     "hromada" = hromada_json))
+                     "hromada" = hromada_json,
+                     "settlement" = settlement_json,
+                     oblast_json))
     
-    if (input$geo_admin_level == "hromada") {
+    if (input$geo_admin_level == "hromada" | input$geo_admin_level == "settlement") {
       if ("Overall" %in% input$geo_defined_oblast) {
-        admin_map(hromada_json)
+        if (input$geo_admin_level == "hromada") {
+          admin_map(hromada_json)
+        }
+        else {
+          admin_map(settlement_json)
+        }
       } else {
         oblast_row <- oblasts[oblasts$admin1Name_eng %in% input$geo_defined_oblast, ]
-        admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+        if (input$geo_admin_level == "hromada") {
+          admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+        } else {
+          admin_map(settlement_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+        }
       }
     }
     points(data.frame(lng = numeric(0), lat = numeric(0)))
@@ -1010,14 +1021,25 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   observeEvent(input$geo_defined_oblast, {
-    if (input$geo_admin_level != "hromada") {
+    if (input$geo_admin_level %in% c("oblast", "raion")) {
       return()
     }
-    if ("Overall" %in% input$geo_defined_oblast) {
-      admin_map(hromada_json)
-    } else {
-      oblast_row <- oblasts[oblasts$admin1Name_eng %in% input$geo_defined_oblast, ]
-      admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+    if (input$geo_admin_level == "hromada") {
+      if ("Overall" %in% input$geo_defined_oblast) {
+        if (input$geo_admin_level == "hromada") {
+          admin_map(hromada_json)
+        }
+        else {
+          admin_map(settlement_json)
+        }
+      } else {
+        oblast_row <- oblasts[oblasts$admin1Name_eng %in% input$geo_defined_oblast, ]
+        if (input$geo_admin_level == "hromada") {
+          admin_map(hromada_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+        } else {
+          admin_map(settlement_json %>% dplyr::filter(ADM1_PCODE %in% oblast_row$admin1Pcode))
+        }
+      }
     }
     points(data.frame(lng = numeric(0), lat = numeric(0)))
     
@@ -1115,8 +1137,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       admin_column <- switch(input$geo_admin_level,
                              "oblast" = "ADM1_PCODE",
                              "raion" = "ADM2_PCODE",
-                             "hromada" = "ADM3_PCODE")
-      
+                             "hromada" = "ADM3_PCODE",
+                             "settlement" = "ADM4_PCODE")
+      print(intersections_admin[[admin_column]])
       
       representation_data_filtered <- representation_data %>%
         dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
