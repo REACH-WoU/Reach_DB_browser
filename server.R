@@ -338,6 +338,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     removeModal()
     processed_data(df)
     
+    output$map_oblast <- renderLeaflet({NULL})
+    output$map_raion <- renderLeaflet({NULL})
+    output$map_hromada <- renderLeaflet({NULL})
+    
+    output$map_oblast_numeric <- renderLeaflet({NULL})
+    output$map_raion_numeric <- renderLeaflet({NULL})
+    output$map_hromada_numeric <- renderLeaflet({NULL})
   })
   
   # if the user has excel input let them use it here
@@ -1382,6 +1389,14 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     removeModal()
     processed_data(df)
+    
+    output$map_oblast <- renderLeaflet({NULL})
+    output$map_raion <- renderLeaflet({NULL})
+    output$map_hromada <- renderLeaflet({NULL})
+    
+    output$map_oblast_numeric <- renderLeaflet({NULL})
+    output$map_raion_numeric <- renderLeaflet({NULL})
+    output$map_hromada_numeric <- renderLeaflet({NULL})
   })
 }
 

@@ -107,10 +107,13 @@ ui <- fluidPage(
                    column(6, plotly::plotlyOutput("graph_2_select")),
                  ),
                  div(style = "height: 50px;"),
+                 h4("Oblast map"),
                  leaflet::leafletOutput("map_oblast"),
                  div(style = "height: 30px;"),
+                 h4("Raion map"),
                  leaflet::leafletOutput("map_raion"),
                  div(style = "height: 30px;"),
+                 h4("Hromada map"),
                  leaflet::leafletOutput("map_hromada"),
                  width = 10
                )
@@ -128,10 +131,13 @@ ui <- fluidPage(
                mainPanel(
                  plotly::plotlyOutput("graph_1_numeric"),
                  div(style = "height: 50px;"),
+                 h4("Oblast map"),
                  leaflet::leafletOutput("map_oblast_numeric"),
                  div(style = "height: 30px;"),
+                 h4("Raion map"),
                  leaflet::leafletOutput("map_raion_numeric"),
                  div(style = "height: 30px;"),
+                 h4("Hromada map"),
                  leaflet::leafletOutput("map_hromada_numeric"),
                  width = 10
                )
