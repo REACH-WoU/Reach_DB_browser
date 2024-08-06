@@ -348,14 +348,20 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   # if the user has excel input let them use it here
-  observeEvent(input$file, {
-    excel_input <- openxlsx::read.xlsx(input$file$datapath)
+  observeEvent(ignoreInit = TRUE, list(input$file,
+                                       input$file_geo), {
+
+    if (!is.null(input$file)){
+      excel_input <- openxlsx::read.xlsx(input$file$datapath)
+    }else if (!is.null(input$file_geo)){
+      excel_input <- openxlsx::read.xlsx(input$file_geo$datapath)
+    }
     # check that excel file is valid
     columns.set <- c("ID", "admin", "admin_category", "option", "variable",
                      "disaggregations_category_1", "disaggregations_1",
                      "weighted_count", "unweighted_count", "perc", "general_count",
                      "full_count", "total_count_perc", "option_orig",
-                     "disaggregations_category_1_orig", "admin_category_orig",
+                     "admin_category_orig",
                      "variable_orig", "disaggregations_1_orig", "TABLE_ID", "mean",
                      "median", "min", "max", "month_conducted")
     
@@ -462,6 +468,27 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   
   output$excel <- downloadHandler(
+    filename = function() {
+      paste("data", Sys.Date(), ".xlsx", sep = "")
+    },
+    content = function(file) {
+      
+      excel_frame <- processed_data()
+      # Create a workbook
+      wb <- createWorkbook()
+      
+      # Add a worksheet
+      addWorksheet(wb, "Data")
+      
+      # Write data to the worksheet
+      writeData(wb, "Data", x = excel_frame, startCol = 1, startRow = 1, rowNames = FALSE)
+      
+      # Save the workbook
+      saveWorkbook(wb, file)
+    }
+  )
+  
+  output$excel_geo <- downloadHandler(
     filename = function() {
       paste("data", Sys.Date(), ".xlsx", sep = "")
     },
@@ -1244,7 +1271,14 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
 
     if (any(question_table.reactive()$bool)) {
       output$geo_get_request <- renderUI({
-        actionButton("geo_get_request", "Get request")
+        tagList(
+          actionButton("geo_get_request", "Get request"),
+          div(style = "height: 10px;"),
+          span('If you want to save the current selection of variables for the future, you can download an excel file with them',
+               style = "font-weight: bold;"),
+          div(style = "height: 10px;"),
+          downloadButton("excel_geo", "Download Excel"),
+        )
       })
     } else {
       output$geo_get_request <- renderUI({
