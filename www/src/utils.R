@@ -15,9 +15,9 @@ get.questions <- function(table_IDs) {
                                     paste0(table_IDs, collapse = "', '"),"')")) %>%
     dplyr::select(-c("order")) %>%
     rename(choice_name = name,
-           english_choices = `Label::English` ,
-           ukrainian_choices = `Label::Ukrainian`,
-           russian_choices = `Label::Russian`
+           english_choices = `label::English` ,
+           ukrainian_choices = `label::Ukrainian`,
+           russian_choices = `label::Russian`
     )  %>% 
     group_by(TABLE_ID, list_name) %>%
     dplyr::filter(n() <= 20) %>% 
@@ -36,9 +36,25 @@ get.questions <- function(table_IDs) {
   
   questions.table <- tool_survey %>%
     dplyr::left_join(tool_choices, by=c("list_name" = "list_name", "TABLE_ID" = "TABLE_ID")) %>%
-    dplyr::select(TABLE_ID, sector, q.type, `Label::English`, `Label::Ukrainian`, `english_choices`, `ukrainian_choices`) %>%
-    dplyr::rename(english_question = `Label::English`,
-                  ukrainian_question = `Label::Ukrainian`)
+    dplyr::select(TABLE_ID, sector, q.type, `label::English`, `label::Ukrainian`, `english_choices`, `ukrainian_choices`) %>%
+    dplyr::rename(english_question = `label::English`,
+                  ukrainian_question = `label::Ukrainian`)
   
   return(questions.table)
 }
+
+# define func for daf
+is.perc.func <- function(table_name, column_name) {
+  query <- paste0(
+    "SELECT COUNT(*) AS cannot_cast_to_float_count ",
+    "FROM ", table_name, " ",
+    "WHERE ", column_name, " IS NOT NULL ",
+    "AND ", column_name, " != 'nan' ",
+    "AND TRY_CAST(", column_name, " AS FLOAT) IS NULL;"
+  )
+  
+  res <- dbGetQuery(my_connection, query)
+  return(res$cannot_cast_to_float_count > 0)
+}
+
+# is.perc.func("data_UKR2203_R23_Customers_main_DCMPR", "b11_gas_heating_price")

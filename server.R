@@ -103,11 +103,11 @@ server <- function(input, output, session) {
     
     df_choices_added <- needed_data %>%
       left_join(tool_survey %>%
-                  select(name, contains('Label'), TABLE_ID) %>%
+                  select(name, contains('label'), TABLE_ID) %>%
                   rename(
-                    english_question = `Label::English` ,
-                    ukrainian_question = `Label::Ukrainian`,
-                    russian_question = `Label::Russian`
+                    english_question = `label::English` ,
+                    ukrainian_question = `label::Ukrainian`,
+                    russian_question = `label::Russian`
                   ) %>%
                   mutate(name = str_squish(name))) %>% 
       left_join(rep_table) %>% 
@@ -303,8 +303,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
     
-    # write.xlsx(DAF_template, "daf.xlsx")
-    # write.xlsx(general_info, "gen_info.xlsx")
+    write.xlsx(DAF_template, "daf.xlsx")
+    write.xlsx(general_info, "gen_info.xlsx")
 
     json_body <- list(
       daf_file = DAF_template,
@@ -358,11 +358,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
     # check that excel file is valid
     columns.set <- c("ID", "admin", "admin_category", "option", "variable",
-                     "disaggregations_category_1", "disaggregations_1",
+                     "disaggregations_category_1",
                      "weighted_count", "unweighted_count", "perc", "general_count",
                      "full_count", "total_count_perc", "option_orig",
                      "admin_category_orig",
-                     "variable_orig", "disaggregations_1_orig", "TABLE_ID", "mean",
+                     "variable_orig", "TABLE_ID", "mean",
                      "median", "min", "max", "month_conducted")
     
     if(!all(columns.set %in% colnames(excel_input))){
@@ -392,7 +392,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     if(!is.null(processed_data())){
       
       df <- processed_data()
-      testo<<- df
+      if (!("disaggregations_1" %in% colnames(df))) {
+        df$disaggregations_1 = " Overall"
+      }
       if ("mean" %in% colnames(df)) {
         print("mean")
         numeric <- df %>%
@@ -433,7 +435,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           mutate(across(any_of(c('disaggregations_1','disaggregations_1_orig',
                                  'disaggregations_category_1','disaggregations_category_1_orig')), ~ ifelse(is.na(.x),' Overall',.x)),
                  across(c(weighted_count, unweighted_count,perc, general_count), ~ ifelse(is.na(.x),0,.x))) 
-        
+
         
       } else {
         select <- data.frame(
@@ -454,12 +456,35 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       projects_numeric <- unique(numeric$TABLE_ID)
       projects_select <- unique(select$TABLE_ID)
-      print(unique(numeric$variable_orig))
       
       updateSelectizeInput(session, "project", choices = projects_select)
       updateSelectizeInput(session, "project_numeric", choices = projects_numeric)
       
-      showNotification("The data has been processed. You can either download it as an excel or switch to the next page to view visuals",
+      updateSelectizeInput(session, "variable_orig", choices = c(), selected = NULL)
+      updateSelectizeInput(session, "variable_orig_numeric", choices = c(), selected = NULL)
+      
+      updateSelectizeInput(session, "dissagr", choices = c(), selected = NULL)
+      updateSelectizeInput(session, "dissagr_numeric", choices = c(), selected = NULL)
+      
+      updateSelectizeInput(session, "option", choices = c(), selected = NULL)
+      updateSelectizeInput(session, "option_numeric", choices = c(), selected = NULL)
+      
+      output$map_oblast <- renderLeaflet({NULL})
+      output$map_raion <- renderLeaflet({NULL})
+      output$map_hromada <- renderLeaflet({NULL})
+      
+      output$map_oblast_numeric <- renderLeaflet({NULL})
+      output$map_raion_numeric <- renderLeaflet({NULL})
+      output$map_hromada_numeric <- renderLeaflet({NULL})
+      
+      output$graph_1_select <- renderPlotly({NULL})
+      output$graph_2_select <- renderPlotly({NULL})
+      output$graph_3_select <- renderPlotly({NULL})
+      
+      output$graph_1_numeric <- renderPlotly({NULL})
+      output$graph_2_numeric <- renderPlotly({NULL})
+      
+      showNotification("The data has been processed. You can either download it as an excel or switch to the Categorical, Numerical and Timeline pages to view visuals",
                        type = 'message')
       
     }
@@ -511,8 +536,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   ################################ Geoview part ################################
   
-  observeEvent(ignoreInit = TRUE,input$project, {
-    if (!is.null(input$project) & nrow(select_data())>0) {
+  observeEvent(ignoreInit = FALSE, input$project, {
+    if (!is.null(input$project) && !is.null(select_data()) && nrow(select_data())>0) {
       
       filtered_df <- select_data() %>% filter(TABLE_ID == input$project)
       
@@ -529,26 +554,38 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
   })
   
-  observeEvent(ignoreInit = TRUE,list(
-    input$variable_orig,
-    input$project
+  observeEvent(ignoreInit = FALSE,list(
+    input$project, input$variable_orig
   ), {
-    if (!is.null(input$variable_orig)& !is.null(input$project) & nrow(select_data())>0) {
-      
+    if (!is.null(input$variable_orig) && !is.null(select_data()) && nrow(select_data())>0) {
       data_processed <- select_data()
       
       
       filtered_df <- data_processed %>%
-        filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
+        dplyr::filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
+               perc>0)
+      
+      updateSelectizeInput(session, "dissagr", choices = unique(filtered_df$disaggregations_1), selected = NULL)
+    }
+  })
+  
+  observeEvent(ignoreInit = FALSE,list(
+    input$project, input$variable_orig, input$dissagr
+  ), {
+    if (!is.null(input$variable_orig) && !is.null(input$dissagr) && !is.null(select_data()) && nrow(select_data())>0) {
+      
+      data_processed <- select_data()
+      
+      filtered_df <- data_processed %>%
+        dplyr::filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig & disaggregations_1 %in% c(input$dissagr, " Overall"),
                perc>0)
 
       overall_admin_data <- filtered_df %>%
-        filter(admin == "Overall" & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
+        dplyr::filter(admin == "Overall" & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
         rowwise() %>% 
-        mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
-        ungroup()
-      
-
+        dplyr::mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
+        ungroup() %>%
+        distinct()
       
       options <- unique(filtered_df$option)
       
@@ -558,13 +595,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       # basic chart
       
       total_cnt <- round(sum(overall_admin_data$perc)*100,0)
-      title <- unique(overall_admin_data$variable)
-      
+      title_graph_1 <- paste0(unique(overall_admin_data$variable),'<br>')
       
       output$graph_1_select <- renderPlotly({
         if(total_cnt==100){
           graph_1 <- plot_ly(overall_admin_data, labels = ~option, values = ~weighted_count, type = 'pie', hole = 0.6) %>%
-            layout(title = list(text = paste0("<b>",title ,"</b>"),
+            layout(title = list(text = paste0("<b>",title_graph_1 ,"</b>"),
                                 font = list(color = '#000080', size = 12)),
                    showlegend = TRUE)
           
@@ -572,7 +608,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           graph_1 <- plot_ly(overall_admin_data, x = ~perc*100, y = ~option,  type = 'bar',
                              text = ~paste0(round(perc*100,1),'%'),
                              textposition = 'outside') %>%
-            layout(title = list(text=paste0("<b>",title ,"</b>"),
+            layout(title = list(text=paste0("<b>",title_graph_1 ,"</b>"),
                                 font = list(color = '#000080', size = 12)),
                    xaxis = list(ticksuffix = "%",title = "", range = c(0,110)),
                    yaxis = list(title = ""))
@@ -581,14 +617,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       })
       
       
-      
-      
       # disaggregation graph
       overall_disaggregation_data <- filtered_df %>%
         filter(admin == "Overall") %>% 
         rowwise() %>% 
         mutate(option = paste(strwrap(option, width = 35), collapse = "<br>")) %>% 
-        ungroup()
+        ungroup()  %>%
+        distinct()
       
       check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), c(' Overall','Overall'))
       
@@ -598,26 +633,26 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
       }
       
-      title <- paste0(unique(overall_disaggregation_data$variable),'<br>')
+      title_graph_2 <- paste0(unique(overall_disaggregation_data$variable),'<br>')
       # cut off the title if it is too long
-      title <- substr(title, 1, 50)
-      title <- paste0(title, '...')
-      title <- paste0(title,'<br>')
+      
+      title_graph_2 <- substr(title_graph_2, 1, 50)
+      title_graph_2 <- paste0(title_graph_2, " by ", paste(unique(overall_disaggregation_data$disaggregations_1), collapse = ", "), '<br>')
+      
       
       output$graph_2_select <- renderPlotly({
-        plot_ly(overall_disaggregation_data, x = ~perc*100, y = ~option, color = ~disaggregations_category_1, type = 'bar',
+        plot_ly(overall_disaggregation_data, x = ~perc*100, y = ~disaggregations_category_1, color = ~option, type = 'bar',
                 text = ~paste0(round(perc*100,1),'%'),
                 textposition = 'auto',
                 insidetextanchor = 'start',
                 hoverinfo = 'text',
                 marker = list(line = list(width = 1, color = "black"))) %>%
-          layout(title = list(text = paste0("<b>", title , "</b>"),
+          layout(title = list(text = paste0("<b>", title_graph_2 , "</b>"),
                               font = list(color = '#000080', size = 12)),
                  xaxis = list(ticksuffix = "%", title = "", range = c(0,110),
                               automargin = TRUE),
                  yaxis = list(title = "", automargin = TRUE, standoff = 15),  # Додаємо параметр standoff
                  margin = list(l = 100, r = 20, t = 50, b = 50),
-                 height = 400,
                  showlegend = TRUE)
       })
       
@@ -629,7 +664,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   
   observeEvent(ignoreInit = TRUE,input$variable_orig_m,{
-    if(!is.null(input$variable_orig_m) & nrow(select_data())>0){
+    if(!is.null(input$variable_orig_m) && !is.null(select_data()) && nrow(select_data())>0){
       
       data_processed <- select_data()
       
@@ -637,8 +672,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       graph_base3 <- data_processed %>% 
         filter(variable_orig %in% input$variable_orig_m,
                disaggregations_category_1 %in% c(' Overall','Overall'),
-               admin %in% 'Overall',
-               perc>0) %>% 
+               admin %in% 'Overall') %>% 
         rowwise() %>% 
         mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'),
@@ -684,7 +718,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   
   observeEvent(ignoreInit = TRUE,input$option, {
-    if (!is.null(input$option) & nrow(select_data())>0) {
+    if (!is.null(input$option) && !is.null(select_data()) && nrow(select_data())>0) {
       
       filtered_df <- select_data() %>%
         filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 %in% c('Overall',' Overall') & option == input$option)
@@ -749,8 +783,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   })
   ##### numeric
   
-  observeEvent(ignoreInit = TRUE, input$project_numeric, {
-    if (!is.null(input$project_numeric) & nrow(numeric_data()) > 0) {
+  observeEvent(ignoreInit = FALSE, input$project_numeric, {
+    if (!is.null(input$project_numeric) && !is.null(numeric_data()) && nrow(numeric_data()) > 0) {
       
       filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
       
@@ -766,38 +800,47 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
   })
   
-  observeEvent(ignoreInit = TRUE, input$variable_orig_numeric, {
-    if (!is.null(input$variable_orig_numeric) & nrow(numeric_data()) > 0) {
+  observeEvent(ignoreInit = FALSE, list(
+    input$project_numeric, input$variable_orig_numeric
+  ), {
+    if (!is.null(input$variable_orig_numeric) && !is.null(numeric_data()) && nrow(numeric_data()) > 0) {
       
-      filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
+      # print(numeric_data())
+      filtered_df <- numeric_data() %>% 
+        filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
       
       options <- c("mean", "min", "max", "median")
+      print(unique(filtered_df$disaggregations_1))
+      updateSelectizeInput(session, "dissagr_numeric", 
+                           choices = unique(filtered_df$disaggregations_1), 
+                           selected = " Overall")
       
       updateSelectizeInput(session, "option_numeric", choices = options)
     }
-    
   })
   
   
   observeEvent(ignoreInit = TRUE, list(
+    input$project_numeric,
     input$variable_orig_numeric,
     input$option_numeric,
-    input$project_numeric), {
-      if (!is.null(input$option_numeric) & nrow(numeric_data())> 0 & input$option_numeric != '' &
-          !is.null(input$project_numeric)) {
+    input$dissagr_numeric), {
+      if (!is.null(input$option_numeric) & !is.null(numeric_data()) & nrow(numeric_data())> 0 & input$option_numeric != '' &
+          !is.null(input$dissagr_numeric)) {
         
         processed_numerics <- numeric_data()
         filtered_df <- processed_numerics %>%
-          filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
-                   disaggregations_category_1 %in% c(" Overall", 'Overall'))
+          dplyr::filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
+                          disaggregations_1 %in% c(input$dissagr_numeric, " Overall"))  %>%
+          distinct()
         
         # basic stats
         basic_stat_number <- filtered_df %>% 
-          filter(admin_category%in%c(' Overall','Overall')) %>% 
+          filter(admin_category%in%c(' Overall','Overall') & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
           pull(!!sym(input$option_numeric))
         
         # disaggregation graph
-        graph_base_n2 <- processed_numerics %>% 
+        graph_base_n2 <- filtered_df %>% 
           filter(variable_orig %in% input$variable_orig_numeric,
                  admin %in% 'Overall',
                  TABLE_ID %in% input$project_numeric) %>% 
@@ -815,7 +858,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         
         title_text = "Summary Statistics"
         if(length(check_categories)>0){
-          title_text = "Summary Statistics by Gender"
+          title_text = "Summary Statistics"
           graph_base_n2 <- graph_base_n2 %>% 
             filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
         }
@@ -846,7 +889,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
             layout(
               barmode = 'group',
               title = list(
-                text = "Summary Statistics by Gender",
+                text = paste(input$variable_orig_numeric, "summary statistics by", input$dissagr_numeric),
                 font = list(size = 24)
               ),
               xaxis = list(
@@ -942,7 +985,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           rowwise() %>% 
           mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                  period_full = paste(month_conducted,TABLE_ID,variable,sep = '<br>'),
-                 viz_variable = !!sym(input$option_numeric))
+                 viz_variable = !!sym(input$option_numeric))  %>%
+          distinct()
         
         title <- paste0(unique(graph_base3$variable),'<br>')
         # cut off the title if it is too long
@@ -1207,6 +1251,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
       # sort representation_data_filtered by Project
       representation_data_filtered <- representation_data_filtered[order(representation_data_filtered$Project),]
+      representation_data_filtered <- representation_data_filtered %>%
+        dplyr::arrange(Name, Interview_date)
       output$geo_table <- renderRHandsontable({
         rhandsontable(
           representation_data_filtered,
@@ -1320,7 +1366,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     # print(requested_data)
     
     daf <- requested_data %>%
-      left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "Label::English")) %>%
+      left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "label::English")) %>%
       dplyr::mutate(adm_class = admin_level, disaggregations = "Overall", disaggregations_label = "Overall",join = NA, 
                     ID = 1:nrow(.), func = case_when(
                       q.type.x %in% c('select_one','select_multiple') ~ 'freq',
@@ -1444,15 +1490,355 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
     removeModal()
     processed_data(df)
-    
-    output$map_oblast <- renderLeaflet({NULL})
-    output$map_raion <- renderLeaflet({NULL})
-    output$map_hromada <- renderLeaflet({NULL})
-    
-    output$map_oblast_numeric <- renderLeaflet({NULL})
-    output$map_raion_numeric <- renderLeaflet({NULL})
-    output$map_hromada_numeric <- renderLeaflet({NULL})
   })
+  
+  
+  ################### data columns explorer ########################
+  column_field_count <- reactiveVal(1)
+  
+  column_values <- reactiveValues()
+  
+  column_choices <- reactiveValues()
+  
+  # Initialize the first selectize input
+  updateSelectizeInput(session, "column_project_search_1", choices = c("", sort(unique(projects_data$TABLE_ID))))
+  
+  observe({
+    n <- column_field_count()
+    lapply(1:n, function(i) {
+      local({
+        j <- i
+        observeEvent(input[[paste0("column_questions_", j)]], {
+          if (!is.null(input[[paste0("column_questions_", j)]]) && input[[paste0("column_questions_", j)]] != "") {
+            column_values[[paste0("column_questions_", j)]] <- input[[paste0("column_questions_", j)]]
+          }
+          
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  observe({
+    n <- column_field_count()
+    lapply(1:n, function(i) {
+      local({
+        j <- i
+        observeEvent(input[[paste0("column_project_search_", j)]], {
+          if (!is.null(input[[paste0("column_project_search_", j)]]) && input[[paste0("column_project_search_", j)]] != "") {
+            column_values[[paste0("column_project_search_", j)]] <- input[[paste0("column_project_search_", j)]]
+          }
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  observe({
+    n <- column_field_count()
+    lapply(1:n, function(i) {
+      local({
+        j <- i
+        observeEvent(input[[paste0("column_dissagr_", j)]], {
+          if (!is.null(input[[paste0("column_dissagr_", j)]]) && input[[paste0("column_dissagr_", j)]][[1]] != "") {
+            column_values[[paste0("column_dissagr_", j)]] <- input[[paste0("column_dissagr_", j)]]
+          }
+          
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  observe({
+    n <- column_field_count()
+    lapply(1:n, function(i) {
+      local({
+        j <- i
+        observeEvent(input[[paste0("column_admins_", j)]], {
+          if (!is.null(input[[paste0("column_admins_", j)]]) && input[[paste0("column_admins_", j)]][[1]] != "") {
+            column_values[[paste0("column_admins_", j)]] <- input[[paste0("column_admins_", j)]]
+          }
+          
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  observe({
+    n <- column_field_count()  # Отримуємо поточну кількість полів
+    
+    if (!is.null(input[[paste0("column_questions_", n)]]) && input[[paste0("column_questions_", n)]] != "") {
+      column_field_count(n + 1)
+    }
+  })
+  
+  observe({
+    n <- column_field_count()
+    
+    lapply(1:n, function(i) {
+      local({
+        j <- i
+        
+        observeEvent(input[[paste0("column_project_search_", j)]], {
+          if (!is.null(input[[paste0("column_project_search_", j)]]) && input[[paste0("column_project_search_", j)]] != "") {
+            # reset_fields(j)
+            # Get the columns for the selected project
+            # columns <- columns_info %>%
+            #   rowwise() %>%
+            #   dplyr::filter(grepl(input[[paste0("column_project_search_", j)]], table_name)) %>%
+            #   dplyr::select(ColumnName) %>%
+            #   ungroup() %>%
+            #   pull()
+            
+            main_datasheet <- projects_data %>%
+              dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]]) %>%
+              dplyr::select(main_datasheet) %>%
+              pull()
+            
+            columns <- tool_survey %>%
+              dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]] & q.type %in% c("select_one", "select_multiple", "integer", "decimal")) %>%
+              dplyr::select(name) %>%
+              ungroup() %>%
+              pull()
+            
+            # dissagr_columns <- columns_info %>%
+            #   rowwise() %>%
+            #   dplyr::filter(grepl(input[[paste0("column_project_search_", j)]], table_name)) %>%
+            #   dplyr::select(ColumnName, table_name) %>%
+            #   dplyr::filter(table_name %in% projects_data$TABLE_ID_main_sheet) %>%
+            #   dplyr::select(ColumnName) %>%
+            #   ungroup() %>%
+            #   pull()
+            
+            dissagr_columns <- tool_survey %>%
+              dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]] & q.type %in% c("select_one", "select_multiple", "integer", "decimal") &
+                              datasheet %in% main_datasheet) %>%
+              dplyr::select(name) %>%
+              ungroup() %>%
+              pull()
+            
+            admins_columns <- projects_data %>%
+              dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]]) %>%
+              dplyr::select(representative_columns) %>%
+              pull()
+            
+            if (admins_columns == "None") {
+              admins_columns <- c()
+            } else {
+              admins_columns <- unlist(strsplit(admins_columns, ';'))
+              admins_columns <- admins_columns[!grepl("settlemen", admins_columns)]
+            }
+            print(admins_columns)
+            # Update column choices
+            column_choices[[paste0("column_questions_", j)]] <- columns
+            column_choices[[paste0("column_dissagr_", j)]] <- dissagr_columns
+            column_choices[[paste0("column_admins_", j)]] <- admins_columns
+            
+            column_values[[paste0("column_project_search_", j)]] <- input[[paste0("column_project_search_", j)]]
+            
+            # Update selectize inputs
+            updateSelectizeInput(session, paste0("column_questions_", j), choices = c("", columns))
+            updateSelectizeInput(session, paste0("column_dissagr_", j), choices = c("Overall", dissagr_columns))
+            updateSelectizeInput(session, paste0("column_admins_", j), choices = c("Overall", admins_columns))
+          }
+        }, ignoreInit = TRUE)
+      })
+    })
+  })
+  
+  # Render dynamic UI for project and question selection
+  output$column_dynamic_fields <- renderUI({
+    n <- column_field_count()
+    
+    if (n >= 2) {
+      fields <- lapply(2:n, function(i) {
+        fluidRow(
+          column(3, selectizeInput(paste0("column_project_search_", i), "Select project:", 
+                                   choices = c("", sort(unique(projects_data$TABLE_ID))), 
+                                   multiple = FALSE, 
+                                   selected = column_values[[paste0("column_project_search_", i)]])),
+          column(3, selectizeInput(paste0("column_questions_", i), "Select a question:", 
+                                   choices = c(column_choices[[paste0("column_questions_", i)]]), 
+                                   multiple = FALSE, 
+                                   selected = column_values[[paste0("column_questions_", i)]])),
+          column(3, selectizeInput(paste0("column_dissagr_", i), "Select dissagr:", 
+                                   choices = c("Overall", column_choices[[paste0("column_dissagr_", i)]]), 
+                                   multiple = FALSE, 
+                                   selected = column_values[[paste0("column_dissagr_", i)]])),
+          column(3, selectizeInput(paste0("column_admins_", i), "Select admins:", 
+                                   choices = c("Overall", column_choices[[paste0("column_admins_", i)]]), 
+                                   multiple = TRUE, 
+                                   selected = column_values[[paste0("column_admins_", i)]]))
+        )
+      })
+      
+      do.call(tagList, fields)
+    }
+  })
+  
+  
+  observeEvent(ignoreInit = TRUE, input$column_process,{
+    if (is.null(input[["column_questions_1"]]) | input[["column_questions_1"]] == "") {
+      return()
+    }
+    n <- column_field_count()
+    res_text <- ""
+    DAF <- data.frame()
+    gen_info <- data.frame()
+    for(i in 1:n) {
+        column <- input[[paste0("column_questions_", i)]]
+        if (column == "") {
+          next
+        }
+        table_name  <- columns_info %>%
+          dplyr::filter(grepl(input[[paste0("column_project_search_", i)]], table_name) & ColumnName == column) %>%
+          dplyr::select(table_name) %>%
+          unique() %>%
+          pull()
+        
+        func <- tool_survey %>%
+          dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", i)]] & name == column) %>%
+          dplyr::select(`q.type`) %>%
+          unique() %>%
+          pull()
+        
+        if (length(func) == 0 | !(func %in% c("select_one", "select_multiple"))) {
+          # func <- ifelse(is.perc.func(paste0("data_", table_name, "_DCMPR"), column), "perc", "mean")
+          func <- "mean"
+        }
+        
+        column_datasheet <- tool_survey %>%
+          dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", i)]] & name == column) %>%
+          dplyr::select(datasheet) %>%
+          pull()
+        
+        dissagr <- ifelse(input[[paste0("column_dissagr_", i)]] == "Overall", "empty", paste0(input[[paste0("column_dissagr_", i)]], collapse = ","))
+        dissagr_label <- paste0(input[[paste0("column_dissagr_", i)]], collapse = ",")
+        
+        if (is.null(input[[paste0("column_admins_", i)]])) {
+          admins <- c("Overall")
+        } else {
+          admins <- c("Overall", input[[paste0("column_admins_", i)]])
+        }
+        admins <- unique(admins)
+        if (dissagr != "empty") {
+          dissagr <- c(dissagr, "empty")
+          dissagr_label <- c(dissagr_label, "Overall")
+        }
+        for (diss in dissagr) {
+          for (admin in admins) {
+            DAF <- rbind(DAF, data.frame(
+              "TABLE_ID" = c(input[[paste0("column_project_search_", i)]]),
+              "variable" = c(column),
+              "variable_label" = c(column),
+              "calculation" = c("empty"),
+              "func" = func,
+              "admin" = admin,
+              "disaggregations" = diss,
+              "disaggregations_label" = dissagr_label[which(dissagr == diss)],
+              "join" = NA,
+              "q.type" = c(func),
+              "datasheet" = c(column_datasheet),
+              "DB_table_name" = paste0("data_", table_name, "_DCMPR")
+            ))
+          }
+        }
+        
+        main_datasheet <- projects_data %>%
+          dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", i)]]) %>%
+          dplyr::select(main_datasheet) %>%
+          pull()
+        
+        project_ID <- get.project.name(input[[paste0("column_project_search_", i)]])
+        round_ID <- rev(unlist(stringr::str_split(input[[paste0("column_project_search_", i)]], "_")))[[2]]
+        survey_type <- rev(unlist(stringr::str_split(input[[paste0("column_project_search_", i)]], "_")))[[1]]
+        
+        month_conducted <- time_tbl %>%
+          dplyr::filter(TABLE_ID %in% input[[paste0("column_project_search_", i)]]) %>%
+          dplyr::select(Interview_date) %>%
+          pull()
+        
+        gen_info <- rbind(gen_info, data.frame(
+          "TABLE_ID" = c(input[[paste0("column_project_search_", i)]]),
+          "project_ID" = c(project_ID),
+          "round_ID" = c(round_ID),
+          "survey_type" = c(survey_type),
+          "month_conducted" = c(month_conducted[[1]]),
+          "main_sheet_name" = c(paste0("data_", input[[paste0("column_project_search_", i)]], "_", main_datasheet, "_DCMPR")),
+          "weight_column_name" = c("empty")
+        ))
+    }
+    DAF <- DAF %>% distinct()
+    DAF$ID <- seq_len(nrow(DAF))
+    write.xlsx(DAF, "daf_column.xlsx")
+    write.xlsx(gen_info, "gen_info_column.xlsx")
+    
+    json_body <- list(
+      daf_file = DAF,
+      info = gen_info,
+      filter = data.frame(
+        TABLE_ID = as.character(),
+        ID = as.character(),
+        variable = as.character(),
+        operation = as.character(),
+        value = as.character()
+      )
+    )
+    
+    write.xlsx(data.frame(
+      TABLE_ID = as.character(),
+      ID = as.character(),
+      variable = as.character(),
+      operation = as.character(),
+      value = as.character()
+    ), "filter.xlsx")
+    
+    url <- Sys.getenv('url')
+    
+    showModal(
+      modalDialog(
+        title = "Processing",
+        "Sending your request to the processing system.",
+        footer = NULL,
+        easyClose = TRUE
+      )
+    )
+    
+    response <- POST(url, body = json_body, encode = "json")
+    print(status_code(response))
+    
+    char <- rawToChar(response$content)
+    # print(char)
+    df <- fromJSON(char)
+
+    df_final <- as.data.frame(do.call(cbind,df$result))
+
+    # Convert the list to a dataframe
+    df <- purrr::map_dfc(df_final, ~ purrr::map(.x, unlist_with_na) %>% unlist())
+
+    df <- df %>%
+      left_join(gen_info %>% select(TABLE_ID,month_conducted))
+    
+    removeModal()
+    processed_data(df)
+  })
+  
+  output$column_excel <- downloadHandler(
+    filename = function() {
+      paste("data", Sys.Date(), ".xlsx", sep = "")
+    },
+    content = function(file) {
+      
+      excel_frame <- processed_data()
+      # Create a workbook
+      wb <- createWorkbook()
+      
+      # Add a worksheet
+      addWorksheet(wb, "Data")
+      
+      # Write data to the worksheet
+      writeData(wb, "Data", x = excel_frame, startCol = 1, startRow = 1, rowNames = FALSE)
+      
+      # Save the workbook
+      saveWorkbook(wb, file)
+    }
+  )
 }
-
-

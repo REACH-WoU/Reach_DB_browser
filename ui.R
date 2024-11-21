@@ -143,22 +143,45 @@ ui <- fluidPage(
                          )
                        )
               ),
+              tabPanel('Data columns explorer',
+                       sidebarLayout(
+                         sidebarPanel(
+                           fluidRow(
+                             column(3, selectizeInput("column_project_search_1", "Select project:", choices = c(""), multiple = FALSE, selected = "")),
+                             column(3, selectizeInput("column_questions_1", "Select a question:", choices = c(""), multiple = FALSE, selected = "")),
+                             column(3, selectizeInput("column_dissagr_1", "Select dissagr:", choices = c("Overall"), multiple = FALSE, selected = "Overall")),
+                             column(3, selectizeInput("column_admins_1", "Select admins:", choices = c("Overall"), multiple = TRUE, selected = "Overall"))
+                           ),
+                           uiOutput("column_dynamic_fields"),
+                           
+                           actionButton("column_process", "Process"),
+                           downloadButton("column_excel", "Download Excel"),
+                           width = 11
+                         ),
+                         
+                         mainPanel(
+                         )
+                       )
+              ),
               tabPanel('Categorical',
                        sidebarLayout(
                          sidebarPanel(
                            style = "position:fixed;width:inherit;",
                            selectizeInput("project", "Select project:", choices = c(), multiple = FALSE),
                            selectizeInput("variable_orig", "Select variable:", choices = c(), multiple = FALSE),
+                           selectizeInput("dissagr", "Select dissagr:", choices = c(), multiple = FALSE),
                            selectizeInput("option", "Select map z-col option:", choices = c(), multiple = FALSE),
                            width = 2
                          ),
                          
                          mainPanel(
-                           fluidRow(
-                             column(6, plotly::plotlyOutput("graph_1_select")),
-                             column(6, plotly::plotlyOutput("graph_2_select")),
-                           ),
-                           div(style = "height: 50px;"),
+                           # fluidRow(
+                           #   column(6, plotly::plotlyOutput("graph_1_select")),
+                           #   column(6, plotly::plotlyOutput("graph_2_select")),
+                           # ),
+                           plotly::plotlyOutput("graph_1_select", height = "800px"),
+                           plotly::plotlyOutput("graph_2_select", height = "800px"),
+                           # div(style = "height: 50px;"),
                            h4("Oblast map"),
                            leaflet::leafletOutput("map_oblast"),
                            div(style = "height: 30px;"),
@@ -177,6 +200,7 @@ ui <- fluidPage(
                            style = "position:fixed;width:inherit;",
                            selectizeInput("project_numeric", "Select project:", choices = c(), multiple = FALSE),
                            selectizeInput("variable_orig_numeric", "Select variable:", choices = c(), multiple = FALSE),
+                           selectizeInput("dissagr_numeric", "Select dissagr:", choices = c(), multiple = FALSE),
                            selectizeInput("option_numeric", "Select map z-col option:", choices = c(), multiple = FALSE),
                            width = 2
                          ),
@@ -195,7 +219,7 @@ ui <- fluidPage(
                          )
                        )
               ),
-              tabPanel('Timeline categorical view',
+              tabPanel('Timeline categorical',
                        sidebarLayout(
                          sidebarPanel(
                            style = "position:fixed;width:inherit;",
@@ -208,7 +232,7 @@ ui <- fluidPage(
                          )
                        )
               ),
-              tabPanel('Timeline numeric view',
+              tabPanel('Timeline numeric',
                        sidebarLayout(
                          sidebarPanel(
                            style = "position:fixed;width:inherit;",

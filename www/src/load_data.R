@@ -6,7 +6,7 @@ DECLARE @sql NVARCHAR(MAX);
 -- Construct the dynamic SQL
 SET @sql = STUFF(
     (
-        SELECT ' UNION ALL SELECT top 1 ''' + TABLE_ID + ''' as TABLE_ID, [start] AS value FROM data_' + TABLE_ID+'_'+main_datasheet+'_DCMPR' 
+        SELECT ' UNION ALL SELECT top 1 ''' + TABLE_ID + ''' as TABLE_ID, [start] AS value FROM [data_' + TABLE_ID + '_' + main_datasheet + '_DCMPR]'
         FROM data_representative_table
 		where status = 'decompressed' 
 		AND 'data_' + TABLE_ID + '_' + main_datasheet + '_DCMPR' IN (SELECT name FROM sys.tables)
@@ -36,7 +36,7 @@ tool_survey <- dbGetQuery(my_connection , "SELECT * from Survey_DB;")
 rep_table <-  dbGetQuery(my_connection , "SELECT * from representative_columns_table;")
 
 rep_table$representative_at <- apply(rep_table[,c("oblast","raion","hromada","settlement")], 1, 
-                 function(i) paste(colnames(rep_table[,c("oblast","raion","hromada","settlement")])[ !is.na(i) ], collapse = ","))
+                 function(i) paste(colnames(rep_table[,c("oblast","raion","hromada","settlement")])[ !is.na(i) & i != "" ], collapse = ","))
 
 rep_table <- rep_table %>% 
   select(TABLE_ID,oblast,representative_at) %>% 
@@ -85,7 +85,7 @@ hromada_json <- ms_simplify(hromada_json, keep = 0.2, keep_shapes = TRUE)
 # write settlements to file
 # st_write(settlement_json, "www/geodata/Settlements_simplified.geojson")
 
-query <- "SELECT * FROM [dbo].[representative_columns_table];"
+query <- "SELECT * FROM [dbo].[data_representative_table];"
 
 projects_data <- dbGetQuery(my_connection, query)
 
@@ -93,12 +93,15 @@ projects_data <- dbGetQuery(my_connection, query)
 
 projects_data <- projects_data %>%
   dplyr::mutate(
-    project_id = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 1),
-    round = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 2),
-    survey_type = sapply(strsplit(projects_data$TABLE_ID, "_"), "[[", 3))
-
-############### GEO PART
-
-
+    project_id = sapply(strsplit(TABLE_ID, "_"), "[[", 1),
+    round = sapply(strsplit(TABLE_ID, "_"), "[[", 2),
+    survey_type = sapply(strsplit(TABLE_ID, "_"), "[[", 3),
+    TABLE_ID_main_sheet = paste(TABLE_ID, main_datasheet, sep = "_")
+  )
 
 
+columns_info <- dbGetQuery(my_connection, "
+SELECT c.name AS ColumnName, t.name as table_name
+FROM sys.columns c
+JOIN sys.tables t ON c.object_id = t.object_id;") %>%
+  dplyr::mutate(table_name = sapply(strsplit(table_name, "_"), function(x) paste(x[-c(1, length(x))], collapse = "_")))
