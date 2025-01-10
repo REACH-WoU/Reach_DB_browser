@@ -1,3 +1,4 @@
+# Helper function: Handle NULL inputs by returning NA; otherwise, unlist the input
 unlist_with_na <- function(x) {
   if (is.null(x)) {
     return(NA)
@@ -6,6 +7,7 @@ unlist_with_na <- function(x) {
   }
 }
 
+# JavaScript code snippet for handling checkbox interactions in the UI, related to 'Database request' part
 js <- c(
   "$('[id^=checkb]').on('click', function(){",
   "  var id = this.getAttribute('id');",
@@ -16,6 +18,7 @@ js <- c(
   "})"
 )
 
+# JavaScript code snippet for handling checkbox interactions in the UI, related to 'Geospatial request' part
 geo_js <- c(
   "$('[id^=chec]').on('click', function(){",
   "  var id = this.getAttribute('id');",
@@ -26,8 +29,10 @@ geo_js <- c(
   "})"
 )
 
+# Function to generate REACH color palettes for visualizations
 palette_function <- colorRampPalette(c("#F4FBFE", "#DFECEF", "#BFDBE2", "#9FCACE", "#77B2BF", "#4096AA", "#27768A", "#0C596B", "#0C3842", "#0F2328"))
 
+# Create Shiny inputs dynamically for each row in a data frame
 shinyInput <- function(FUN, len, id, ...) {
   inputs <- character(len)
   for (i in seq_len(len)) {
@@ -48,10 +53,12 @@ server <- function(input, output, session) {
   # 
   # output$text_column2 <- renderText({})
   
-  # ---------------------------the requests page --------------------------------
+  # ---------------------------the Database requests page --------------------------------
   
+  # Update the project selection based on available projects in the database
   updateSelectInput(session, "project_search", choices = c("Overall", unique(unique_table$project_ID)))
   
+  # Handle changes in the selected project and update questions dropdown accordingly, related to Database request part
   observeEvent(input$project_search,{
     if(input$project_search == "Overall"){
       updateSelectizeInput(
@@ -76,57 +83,60 @@ server <- function(input, output, session) {
   
   
   
-  
+  # Reactive values to store various intermediate datasets
   datasetInput <- reactiveVal(NULL)
   Dat <- reactiveVal(NULL)
   processed_data <- reactiveVal(NULL)
   numeric_data <- reactiveVal(NULL)
   select_data <- reactiveVal(NULL)
   
-  # # Reactive expression to fetch the selected project
+  # Reactive expression to fetch the selected project
   observeEvent(ignoreInit = TRUE, input$process,{
     req(input$questions)
     
     questions<- input$questions
     
+    # Fetch relevant IDs and filter data
     get_true_IDs <- unique_table %>% 
-      filter(database_label_clean %in% questions) %>% 
-      pull(true_ID)
+      dplyr::filter(database_label_clean %in% questions) %>% 
+      dplyr::pull(true_ID)
     
     
     needed_data <- database_project %>% 
-      filter(true_ID %in% get_true_IDs) %>% 
-      mutate(TABLE_ID = paste0(project_ID,'_R',round_ID,'_',survey_type)) %>% 
+      dplyr::filter(true_ID %in% get_true_IDs) %>% 
+      dplyr::mutate(TABLE_ID = paste0(project_ID,'_R',round_ID,'_',survey_type)) %>% 
       inner_join(time_tbl) %>% 
-      rename(month_conducted = value)
+      dplyr::rename(month_conducted = value)
     
-    
+    # Process data and prepare for rendering in the table
     df_choices_added <- needed_data %>%
       left_join(tool_survey %>%
-                  select(name, contains('label'), TABLE_ID) %>%
-                  rename(
+                  dplyr::select(name, contains('label'), TABLE_ID) %>%
+                  dplyr::rename(
                     english_question = `label::English` ,
                     ukrainian_question = `label::Ukrainian`,
                     russian_question = `label::Russian`
                   ) %>%
-                  mutate(name = str_squish(name))) %>% 
+                  dplyr::mutate(name = str_squish(name))) %>% 
       left_join(rep_table) %>% 
-      select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,
+      dplyr::select(project_ID,survey_type,round_ID,sector,TABLE_ID,q.type,list_name,datasheet,
              english_question,ukrainian_question,russian_question,representative_at,oblast,
              month_conducted,name)
     
     removeModal()
     
+    # Set processed data to reactive value for rendering
     datasetInput(
       cbind(df_choices_added, check = shinyInput(checkboxInput, nrow(df_choices_added), "checkb")
-      ))
+    ))
     
     Dat(cbind(df_choices_added, bool = FALSE)) 
     
+    # Render the data table
     output$table <- renderDT({
       df <- datasetInput()
       df <- df %>% 
-        mutate(representative_at = gsub('\\,',', ',representative_at))
+        dplyr::mutate(representative_at = gsub('\\,',', ',representative_at))
       
       # remove every second space to have a wider bar in the table
       df$oblast <- vapply(df$oblast, function(x){
@@ -484,6 +494,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   })
   
+  # Download handler for exporting data to Excel, related to Database request
   output$excel <- downloadHandler(
     filename = function() {
       paste("data", Sys.Date(), ".xlsx", sep = "")
@@ -505,6 +516,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   )
   
+  # Download handler for exporting data to Excel, related to Geospatial request
   output$excel_geo <- downloadHandler(
     filename = function() {
       paste("data", Sys.Date(), ".xlsx", sep = "")
@@ -528,52 +540,54 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   
   
-  ################################ Geoview part ################################
   
+  # Event to handle when a project is selected, related to Categorical page
   observeEvent(ignoreInit = FALSE, input$project, {
+    # Ensure the input project and selected data are not null and have rows
     if (!is.null(input$project) && !is.null(select_data()) && nrow(select_data())>0) {
-      
+      # Filter data based on the selected project
       filtered_df <- select_data() %>% filter(TABLE_ID == input$project)
-      
+      # Extract unique variables for the selected project
       variables <- unique(filtered_df$variable_orig)
       
       updateSelectizeInput(session, "variable_orig", choices = variables)
       
-      
+      # Update the multi-variable selection input
       variables_m <- unique(select_data()$variable_orig)
-      
       updateSelectizeInput(session, "variable_orig_m", choices = variables_m, selected = variables_m[1])
       
     }
     
   })
   
+  # Event to handle a variable is selected, related to Categorical page
   observeEvent(ignoreInit = FALSE,list(
     input$project, input$variable_orig
   ), {
+    # Ensure variable selection and data are valid
     if (!is.null(input$variable_orig) && !is.null(select_data()) && nrow(select_data())>0) {
       data_processed <- select_data()
       
-      
+      # Filter data for the selected project and variable
       filtered_df <- data_processed %>%
         dplyr::filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig,
                perc>0)
-      
+      # Update disaggregation input with unique values
       updateSelectizeInput(session, "dissagr", choices = unique(filtered_df$disaggregations_1), selected = NULL)
     }
   })
   
+  # Event to handle a disaggregation is selected, related to Categorical page
   observeEvent(ignoreInit = FALSE,list(
     input$project, input$variable_orig, input$dissagr
   ), {
     if (!is.null(input$variable_orig) && !is.null(input$dissagr) && !is.null(select_data()) && nrow(select_data())>0) {
-      
+      # Filter data based on project, variable, and disaggregation
       data_processed <- select_data()
-      
       filtered_df <- data_processed %>%
         dplyr::filter(TABLE_ID %in% input$project & variable_orig %in% input$variable_orig & disaggregations_1 %in% c(input$dissagr, " Overall"),
                perc>0)
-
+      # Process data for overall admin
       overall_admin_data <- filtered_df %>%
         dplyr::filter(admin == "Overall" & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
         rowwise() %>% 
@@ -581,24 +595,24 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         ungroup() %>%
         distinct()
       
+      # Update option input with unique options
       options <- unique(filtered_df$option)
-      
       updateSelectizeInput(session, "option", choices = options)
       
-      
-      # basic chart
-      
+      # Generate graph 1 based on overall admin data
       total_cnt <- round(sum(overall_admin_data$perc)*100,0)
       title_graph_1 <- paste0(unique(overall_admin_data$variable),'<br>')
       
       output$graph_1_select <- renderPlotly({
         if(total_cnt==100){
+          # Pie chart if percentages add up to 100
           graph_1 <- plot_ly(overall_admin_data, labels = ~option, values = ~weighted_count, type = 'pie', hole = 0.6) %>%
             layout(title = list(text = paste0("<b>",title_graph_1 ,"</b>"),
                                 font = list(color = '#000080', size = 12)),
                    showlegend = TRUE)
           
         }else{
+          # Bar chart otherwise
           graph_1 <- plot_ly(overall_admin_data, x = ~perc*100, y = ~option,  type = 'bar',
                              text = ~paste0(round(perc*100,1),'%'),
                              textposition = 'outside') %>%
@@ -611,7 +625,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       })
       
       
-      # disaggregation graph
+      # Prepare data for disaggregation graph
       overall_disaggregation_data <- filtered_df %>%
         filter(admin == "Overall") %>% 
         rowwise() %>% 
@@ -619,21 +633,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         ungroup()  %>%
         distinct()
       
+      # Check categories and filter non-overall data if needed
       check_categories <- setdiff(unique(overall_disaggregation_data$disaggregations_category_1), c(' Overall','Overall'))
-      
-      # check if we even have gender data for this
       if(length(check_categories)>0){
         overall_disaggregation_data <- overall_disaggregation_data %>% 
           filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
       }
       
+      # Generate disaggregation graph
       title_graph_2 <- paste0(unique(overall_disaggregation_data$variable),'<br>')
-      # cut off the title if it is too long
-      
       title_graph_2 <- substr(title_graph_2, 1, 50)
       title_graph_2 <- paste0(title_graph_2, " by ", paste(unique(overall_disaggregation_data$disaggregations_1), collapse = ", "), '<br>')
-      
-      
       output$graph_2_select <- renderPlotly({
         plot_ly(overall_disaggregation_data, x = ~perc*100, y = ~disaggregations_category_1, color = ~option, type = 'bar',
                 text = ~paste0(round(perc*100,1),'%'),
@@ -645,7 +655,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                               font = list(color = '#000080', size = 12)),
                  xaxis = list(ticksuffix = "%", title = "", range = c(0,110),
                               automargin = TRUE),
-                 yaxis = list(title = "", automargin = TRUE, standoff = 15),  # Додаємо параметр standoff
+                 yaxis = list(title = "", automargin = TRUE, standoff = 15),  # add standoff parameter
                  margin = list(l = 100, r = 20, t = 50, b = 50),
                  showlegend = TRUE)
       })
@@ -656,13 +666,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     
   })
   
-  
+  # Event handler for the selection of variables in the multi-variable timeline graph, related to Timeline Categorical page
   observeEvent(ignoreInit = TRUE,input$variable_orig_m,{
     if(!is.null(input$variable_orig_m) && !is.null(select_data()) && nrow(select_data())>0){
       
       data_processed <- select_data()
       
-      # timeline graph
+      # Filter and preprocess data for the timeline graph
       graph_base3 <- data_processed %>% 
         filter(variable_orig %in% input$variable_orig_m,
                disaggregations_category_1 %in% c(' Overall','Overall'),
@@ -672,15 +682,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                period_full = paste(month_conducted, TABLE_ID, variable,sep = '<br>'),
                option = paste(strwrap(option, width = 35), collapse = "<br>"))
       
+      # Summarize percentages to check if they total 100%
       cnts <- graph_base3 %>% group_by(variable,TABLE_ID) %>% summarise(perc=sum(perc)) %>% pull(perc)
       cnts <- round(cnts*100,0)
       title <- graph_base3$variable
-      # cut off the title if it is too long
+      
+      # Prepare graph title
       title <- substr(title, 1, 50)
-      title <- paste0(title, '...')
+      title <- paste0(title, '...') # Truncate if too long
       title <- paste0(title,'<br>')
       
-      
+      # Render the timeline graph using Plotly
       output$graph_3_select <- renderPlotly({
         if(all(cnts==100)){
           
@@ -710,32 +722,33 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   })
   
-  
+  # Event handler for option selection to display geographical maps, related to Categorical page
   observeEvent(ignoreInit = TRUE,input$option, {
     if (!is.null(input$option) && !is.null(select_data()) && nrow(select_data())>0) {
       
+      # Filter the data based on the selected option and variable
       filtered_df <- select_data() %>%
         filter(TABLE_ID == input$project & variable_orig == input$variable_orig & disaggregations_category_1 %in% c('Overall',' Overall') & option == input$option)
       
-      #### oblast plot
-      
+      # Prepare and merge data for oblast-level map visualization
       oblast_map <- filtered_df %>%
         inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
       
       oblast_map <- st_as_sf(oblast_map)
       
-      #### raion plot
+      # Prepare and merge data for raion-level map visualization
       raion_map <- filtered_df %>%
         inner_join(raion_json, by = c("admin_category_orig" = "ADM2_PCODE"))
       
       raion_map <- st_as_sf(raion_map)
       
-      #### hromada plot
+      # Prepare and merge data for hromada-level map visualization
       hromada_map <- filtered_df %>%
         inner_join(hromada_json, by = c("admin_category_orig" = "ADM3_PCODE"))
       
       hromada_map <- st_as_sf(hromada_map)
       
+      # Render oblast-level map using Leaflet
       if (nrow(oblast_map) > 0) {
         output$map_oblast <- renderLeaflet({
           req(oblast_map)
@@ -747,7 +760,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                                 "OpenTopoMap"))@map
         })
       }
-      
+      # Render raion-level map using Leaflet
       if (nrow(raion_map) > 0) {
         output$map_raion <- renderLeaflet({
           req(raion_map)
@@ -759,7 +772,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
                                 "OpenTopoMap"))@map
         })
       }
-      
+      # Render hromada-level map using Leaflet
       if (nrow(hromada_map) > 0) {
         output$map_hromada <- renderLeaflet({
           req(hromada_map)
@@ -775,45 +788,47 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
     
   })
-  ##### numeric
   
+  ##### numeric
+  # Event handler for project selection, updates the list of variables and multi-variable selection for numeric data
+  # related to Numeric page
   observeEvent(ignoreInit = FALSE, input$project_numeric, {
     if (!is.null(input$project_numeric) && !is.null(numeric_data()) && nrow(numeric_data()) > 0) {
-      
+      # Filter the numeric data for the selected project
       filtered_df <- numeric_data() %>% filter(TABLE_ID == input$project_numeric)
-      
+      # Extract unique variable names and update the single-variable input
       variables <- unique(filtered_df$variable_orig)
-      
       updateSelectizeInput(session, "variable_orig_numeric", choices = variables)
-      
+      # Extract unique variable names for multi-variable selection and set default selection
       variables_m <- unique(numeric_data()$variable_orig)
-      
       updateSelectizeInput(session, "variable_orig_m_numeric", choices = variables_m, selected = variables_m[1])
       
     }
     
   })
-  
+  # Event handler for updating disaggregation and option selection based on selected project and variable
+  # related to Numeric page
   observeEvent(ignoreInit = FALSE, list(
     input$project_numeric, input$variable_orig_numeric
   ), {
     if (!is.null(input$variable_orig_numeric) && !is.null(numeric_data()) && nrow(numeric_data()) > 0) {
       
-      # print(numeric_data())
+      # Filter the data based on selected project and variable
       filtered_df <- numeric_data() %>% 
         filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric)
       
-      options <- c("mean", "min", "max", "median")
-      print(unique(filtered_df$disaggregations_1))
+      # Update disaggregation input with unique categories
       updateSelectizeInput(session, "dissagr_numeric", 
                            choices = unique(filtered_df$disaggregations_1), 
                            selected = " Overall")
       
+      # Define and update options (e.g., mean, min, max, median)
+      options <- c("mean", "min", "max", "median")
       updateSelectizeInput(session, "option_numeric", choices = options)
     }
   })
   
-  
+  # Event handler for processing numeric data and rendering visualizations, related to Numeric page
   observeEvent(ignoreInit = TRUE, list(
     input$project_numeric,
     input$variable_orig_numeric,
@@ -823,53 +838,48 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           !is.null(input$dissagr_numeric)) {
         
         processed_numerics <- numeric_data()
+        
+        # Filter data based on project, variable, and disaggregation selection
         filtered_df <- processed_numerics %>%
           dplyr::filter(TABLE_ID == input$project_numeric & variable_orig == input$variable_orig_numeric & 
                           disaggregations_1 %in% c(input$dissagr_numeric, " Overall"))  %>%
           distinct()
         
-        # basic stats
+        # Extract basic statistics based on the selected option
         basic_stat_number <- filtered_df %>% 
-          filter(admin_category%in%c(' Overall','Overall') & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
-          pull(!!sym(input$option_numeric))
+          dplyr::filter(admin_category%in%c(' Overall','Overall') & disaggregations_category_1 %in% c('Overall',' Overall')) %>% 
+          dplyr::pull(!!sym(input$option_numeric))
         
-        # disaggregation graph
+        # Prepare data for disaggregation graph
         graph_base_n2 <- filtered_df %>% 
-          filter(variable_orig %in% input$variable_orig_numeric,
+          dplyr::filter(variable_orig %in% input$variable_orig_numeric,
                  admin %in% 'Overall',
                  TABLE_ID %in% input$project_numeric) %>% 
           rowwise() %>% 
-          mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
+          dplyr::mutate(variable = paste(strwrap(variable, width = 35), collapse = "<br>"),
                  vis_variable  = !!sym(input$option_numeric))
         
+        # Format graph title
         title <- paste0(unique(graph_base_n2$variable),'<br>')
         # cut off the title if it is too long
         title <- substr(title, 1, 50)
         title <- paste0(title, '...')
         title <- paste0(title,'<br>')
         
+        # Check for additional categories and adjust data
         check_categories <- setdiff(unique(graph_base_n2$disaggregations_category_1), c(' Overall','Overall'))
         
         title_text = "Summary Statistics"
         if(length(check_categories)>0){
           title_text = "Summary Statistics"
           graph_base_n2 <- graph_base_n2 %>% 
-            filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
+            dplyr::filter(!disaggregations_category_1 %in% c(' Overall','Overall'))
         }
-        
+        # Reshape data for visualization
         graph_base_n2 <- graph_base_n2 %>%
           pivot_longer(cols = c('mean', 'min', 'max', 'median'), names_to = 'statistic', values_to = 'value')
         
-        # output$graph_1_numeric <- renderPlotly({
-        #   plot_ly(graph_base_n2, x = ~variable, y = ~vis_variable, color = ~disaggregations_category_1, type = 'bar',
-        #           text = ~round(vis_variable,1),
-        #           textposition = 'outside') %>%
-        #     layout(title = list(text=paste0("<b>",title ,"</b>"),
-        #                         font = list(color = '#000080', size = 12)),
-        #            xaxis = list(title = ""),
-        #            yaxis = list(title = ""))
-        # })
-        
+        # Render bar chart for summary statistics
         output$graph_1_numeric <- renderPlotly({
           plot_ly(
             graph_base_n2, 
@@ -901,9 +911,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
             )
         })
         
-        
+        # Create maps for oblast, raion, and hromada levels
         #### oblast plot
-        
         oblast_map_numeric <- filtered_df %>%
           inner_join(oblast_json, by = c("admin_category_orig" = "ADM1_PCODE"))
         
@@ -921,6 +930,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         
         hromada_map_numeric <- st_as_sf(hromada_map_numeric)
         
+        # Render maps for each geographic level if data is available
         if (nrow(oblast_map_numeric) > 0) {
           output$map_oblast_numeric <- renderLeaflet({
             req(oblast_map_numeric)
@@ -963,7 +973,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       
     })
   
-  
+  # Event handler for the selection of variables in the multi-variable timeline graph, related to Timeline numeric page
   observeEvent(ignoreInit = TRUE, list(
     input$variable_orig_m_numeric,
     input$option_numeric),{
@@ -987,20 +997,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         title <- substr(title, 1, 50)
         title <- paste0(title, '...')
         title <- paste0(title,'<br>')
-        
-        
-        # output$graph_2_numeric <- renderPlotly({
-        #   plot_ly(graph_base3, x = ~period_full, y = ~viz_variable , type = 'bar',
-        #           text = ~round(viz_variable,1),
-        #           textposition = 'outside',
-        #           textfont =  list(size = 12,color = 'black')) %>%
-        #     layout(title = list(text=paste0("<b>",title ,"</b>"),
-        #                         font = list(color = '#000080', size = 1)),
-        #            legend = list(x = 0, y = -0.2),
-        #            xaxis = list(title = ""),
-        #            yaxis = list(title = ""))
-        #   
-        # })
         
         graph_base3 <- graph_base3 %>%
           pivot_longer(cols = c('mean', 'min', 'max', 'median'),
@@ -1046,19 +1042,21 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   
   ################################## GEO PART ##################################
-  
+  # Define reactive variables for storing data
   points <- reactiveVal(data.frame(lng = numeric(0), lat = numeric(0)))
   admin_map = reactiveVal()
   info_table = reactiveVal()
   
+  # Observe the geo_admin_level input, updates the map based on selected administrative level
+  # related to Geospatial request page
   observeEvent(input$geo_admin_level,{
     admin_map(switch(input$geo_admin_level,
                      "oblast" = oblast_json,
                      "raion" = raion_json,
                      "hromada" = hromada_json,
                      "settlement" = settlement_json,
-                     oblast_json))
-    
+                     oblast_json))  # Assign map data based on selection
+    # Update the map based on the selected oblast and admin level
     if (input$geo_admin_level == "hromada" | input$geo_admin_level == "settlement") {
       if ("Overall" %in% input$geo_defined_oblast) {
         if (input$geo_admin_level == "hromada") {
@@ -1076,24 +1074,27 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         }
       }
     }
+    # Reset points and tables
     points(data.frame(lng = numeric(0), lat = numeric(0)))
-    
     ### reset question table and info table
     output$geo_table <- renderRHandsontable({
       NULL
     })
     
     info_table(NULL)
-    
     output$geo_questions_table <- renderDT({
       NULL
     })
   })
-  
+  # Observe the geo_defined_oblast input, updates the map based on selected oblast
+  # plot only needed area, improve time performance
+  # related to Geospatial request page
   observeEvent(input$geo_defined_oblast, {
+    # Skip if admin level is "oblast" or "raion"
     if (input$geo_admin_level %in% c("oblast", "raion")) {
       return()
     }
+    # Handle map updates for hromada and settlement based on the selected oblast
     if (input$geo_admin_level == "hromada") {
       if ("Overall" %in% input$geo_defined_oblast) {
         if (input$geo_admin_level == "hromada") {
@@ -1111,21 +1112,21 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         }
       }
     }
-    points(data.frame(lng = numeric(0), lat = numeric(0)))
     
+    # Reset points and tables
+    points(data.frame(lng = numeric(0), lat = numeric(0)))
     ### reset question table and info table
     output$geo_table <- renderRHandsontable({
       NULL
     })
     
     info_table(NULL)
-    
     output$geo_questions_table <- renderDT({
       NULL
     })
   })
   
-  
+  # Render the map with the current administrative level and data
   output$geo_map <- renderLeaflet({
     if (is.null(admin_map())) {
       return()
@@ -1145,10 +1146,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       setView(lng = 31.1656, lat = 48.3794, zoom =6)
   })
   
+  # Handle map clicks to add points and update the map with selected points, related to Geospatial request page
   observeEvent(input$geo_map_click, {
     click <- input$geo_map_click
     new_point <- data.frame(lng = click$lng, lat = click$lat)
-    points(rbind(points(), new_point))
+    points(rbind(points(), new_point)) # Add new point to the points reactive variable
     
     current_points <- points()
     
@@ -1167,6 +1169,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       addMarkers(lng = current_points$lng, lat = current_points$lat)
   })
   
+  # Reset points, map, and tables
   observeEvent(input$geo_reset, {
     points(data.frame(lng = numeric(0), lat = numeric(0)))
     
@@ -1195,8 +1198,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
     
   })
+  
   intersections <- reactiveVal()
+  # Handle request to get information based on selected points, related to Geospatial request page
   observeEvent(input$geo_get_info, {
+    # Handle geometry creation based on the number of points selected
     if (nrow(points()) > 2) {
       closed_points <- rbind(
         data.frame(lng = points()$lng, lat = points()$lat),
@@ -1219,15 +1225,17 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       geometry <- st_sfc(st_point(as.matrix(closed_points)), crs = 4326)
     }
     
-    
+    # Check if geometry is valid and find intersections with the admin map
     if (st_is_valid(geometry)) {
       admin_map_planar <- st_transform(admin_map(), 3857)
       geometry_planar <- st_transform(geometry, 3857)
+      # Find intersections or coverage based on user selection
       if (input$geo_relation_type == "covers") {
         intersections_admin <- admin_map()[unlist(st_covers(geometry_planar, admin_map_planar)), ]
       } else if (input$geo_relation_type == "intersects") {
         intersections_admin <- admin_map()[unlist(st_intersects(geometry_planar, admin_map_planar)), ]
       }
+      # Filter representation data based on intersections
       admin_column <- switch(input$geo_admin_level,
                              "oblast" = "ADM1_PCODE",
                              "raion" = "ADM2_PCODE",
@@ -1262,10 +1270,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   })
   
+  # Handle table interactions and updating the geo_table table
   observeEvent(input$geo_table, {
     info_table(hot_to_r(input$geo_table))
   })
   
+  # Check whether the 'Get_info' button should be shown(only if points or polygons were drawn)
   showGetButton <- reactive({
     if (!is.null(info_table())) {
       user_data <- info_table()
@@ -1284,7 +1294,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   outputOptions(output, "geo_showGetButton", suspendWhenHidden = FALSE)
   
-  
+  # Handle user selection for requesting data, realted to Question observer page
   observeEvent(input$geo_get_questions, {
     
     user_data <- as_tibble(hot_to_r(input$geo_table)) %>%
@@ -1292,14 +1302,15 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     user_data$TABLE_ID <- paste(user_data$Project, user_data$Round, user_data$Type, sep = "_")
     table_Ids <- unique(user_data$TABLE_ID)
     
+    # Fetch questions based on selected table IDs
     question.table <- get.questions(table_Ids) %>%
       dplyr::rename(Project_Round_Type = TABLE_ID, "english_question_label" = english_question, "ukrainian_question_label" = ukrainian_question)
     
-
+    # Add checkboxes for user selection of questions
     question.table <- cbind(question.table, check = shinyInput(checkboxInput, nrow(question.table), "chec"))
     
+    # Render the question table
     output$geo_questions_table <- renderDT({
-      
       datatable(question.table,
                 filter = "top",
                 selection = 'none',
@@ -1319,6 +1330,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           border = '1px solid black'
         )
     }, server = FALSE)
+    
+    # Switch tab to "Questions observer"
     updateTabsetPanel(session, inputId = "tabs", selected = "Questions observer")
     
     question_table.reactive(cbind(question.table, bool = FALSE))
@@ -1326,10 +1339,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   question_table.reactive <- reactiveVal()
   
+  # Update table when cell is edited
   observeEvent(input$geo_table_cell_edit, {
     info <- input$geo_table_cell_edit
     question_table.reactive(editData(question_table.reactive(), info))
-
+    
+    # Show or hide the 'Get request' button based on user selection
     if (any(question_table.reactive()$bool)) {
       output$geo_get_request <- renderUI({
         tagList(
@@ -1348,16 +1363,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   })
   
+  # Handle the 'Get request' action to send data for processing
   observeEvent(input$geo_get_request, {
-    
     requested_data <- question_table.reactive() %>%
       dplyr::filter(bool == TRUE)
     
     admin_level <- input$geo_admin_level
-    # 
-    # requested_data<<-requested_data
-    # tool_survey<<-tool_survey
-    # print(requested_data)
     
     daf <- requested_data %>%
       left_join(tool_survey, by = c("Project_Round_Type" = "TABLE_ID", "english_question_label" = "label::English")) %>%
@@ -1457,22 +1468,15 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       mutate(operation = '==') %>% 
       rename(variable = admin_var)
     
-
-    # daf$disaggregations <- 'Overall'
-    
     # write.xlsx(daf, "daf_geo.xlsx")
     # write.xlsx(general_info, "gen_info_geo.xlsx")
     # write.xlsx(filter, "filter_geo.xlsx")
 
-    
     json_body <<- list(
       daf_file = daf,
       info = general_info,
       filter = filter
     )
-    
-    # testo<<-json_body
-    
     url <- Sys.getenv('url')
     
     response <- POST(url, body = json_body, encode = "json")
@@ -1496,20 +1500,22 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
   
   
   ################### data columns explorer ########################
+  
+  # Reactive values and variables for managing dynamic inputs and their states
   column_field_count <- reactiveVal(1)
-  
   column_values <- reactiveValues()
-  
   column_choices <- reactiveValues()
   
-  # Initialize the first selectize input
+  # Initialize the first selectize input with available projects from the database
   updateSelectizeInput(session, "column_project_search_1", choices = c("", sort(unique(projects_data$TABLE_ID))))
   
+  # Observers for updating reactive column_values when column_questions_ have changes
   observe({
     n <- column_field_count()
     lapply(1:n, function(i) {
       local({
         j <- i
+        # Update column_values based on changes in "column_questions_" inputs
         observeEvent(input[[paste0("column_questions_", j)]], {
           if (!is.null(input[[paste0("column_questions_", j)]]) && input[[paste0("column_questions_", j)]] != "") {
             column_values[[paste0("column_questions_", j)]] <- input[[paste0("column_questions_", j)]]
@@ -1520,11 +1526,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
   })
   
+  # Observers for updating reactive column_values when column_project_search_ have changes
   observe({
     n <- column_field_count()
     lapply(1:n, function(i) {
       local({
         j <- i
+        # Update column_values based on changes in "column_project_search_" inputs
         observeEvent(input[[paste0("column_project_search_", j)]], {
           if (!is.null(input[[paste0("column_project_search_", j)]]) && input[[paste0("column_project_search_", j)]] != "") {
             column_values[[paste0("column_project_search_", j)]] <- input[[paste0("column_project_search_", j)]]
@@ -1533,12 +1541,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       })
     })
   })
-  
+  # Observers for updating reactive column_values when column_dissagr_ have changes
   observe({
     n <- column_field_count()
     lapply(1:n, function(i) {
       local({
         j <- i
+        # Update column_values based on changes in "column_dissagr_" inputs
         observeEvent(input[[paste0("column_dissagr_", j)]], {
           if (!is.null(input[[paste0("column_dissagr_", j)]]) && input[[paste0("column_dissagr_", j)]][[1]] != "") {
             column_values[[paste0("column_dissagr_", j)]] <- input[[paste0("column_dissagr_", j)]]
@@ -1549,11 +1558,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
   })
   
+  # Observers for updating reactive column_values when column_admins_ have changes
   observe({
     n <- column_field_count()
     lapply(1:n, function(i) {
       local({
         j <- i
+        # Update column_values based on changes in "column_admins_" inputs
         observeEvent(input[[paste0("column_admins_", j)]], {
           if (!is.null(input[[paste0("column_admins_", j)]]) && input[[paste0("column_admins_", j)]][[1]] != "") {
             column_values[[paste0("column_admins_", j)]] <- input[[paste0("column_admins_", j)]]
@@ -1564,14 +1575,16 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     })
   })
   
+  # observe new fields creation, change column_field_count
   observe({
-    n <- column_field_count()  # Отримуємо поточну кількість полів
+    n <- column_field_count()  # Receive current number of fields(rows)
     
     if (!is.null(input[[paste0("column_questions_", n)]]) && input[[paste0("column_questions_", n)]] != "") {
       column_field_count(n + 1)
     }
   })
   
+  #observe column_project_search_ and extract relevant questions
   observe({
     n <- column_field_count()
     
@@ -1581,14 +1594,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         
         observeEvent(input[[paste0("column_project_search_", j)]], {
           if (!is.null(input[[paste0("column_project_search_", j)]]) && input[[paste0("column_project_search_", j)]] != "") {
-            # reset_fields(j)
-            # Get the columns for the selected project
-            # columns <- columns_info %>%
-            #   rowwise() %>%
-            #   dplyr::filter(grepl(input[[paste0("column_project_search_", j)]], table_name)) %>%
-            #   dplyr::select(ColumnName) %>%
-            #   ungroup() %>%
-            #   pull()
             
             main_datasheet <- projects_data %>%
               dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]]) %>%
@@ -1600,15 +1605,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
               dplyr::select(name) %>%
               ungroup() %>%
               pull()
-            
-            # dissagr_columns <- columns_info %>%
-            #   rowwise() %>%
-            #   dplyr::filter(grepl(input[[paste0("column_project_search_", j)]], table_name)) %>%
-            #   dplyr::select(ColumnName, table_name) %>%
-            #   dplyr::filter(table_name %in% projects_data$TABLE_ID_main_sheet) %>%
-            #   dplyr::select(ColumnName) %>%
-            #   ungroup() %>%
-            #   pull()
             
             dissagr_columns <- tool_survey %>%
               dplyr::filter(TABLE_ID == input[[paste0("column_project_search_", j)]] & q.type %in% c("select_one", "select_multiple", "integer", "decimal") &
@@ -1628,7 +1624,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
               admins_columns <- unlist(strsplit(admins_columns, ';'))
               admins_columns <- admins_columns[!grepl("settlemen", admins_columns)]
             }
-            print(admins_columns)
             # Update column choices
             column_choices[[paste0("column_questions_", j)]] <- columns
             column_choices[[paste0("column_dissagr_", j)]] <- dissagr_columns
@@ -1676,8 +1671,9 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     }
   })
   
-  
+  # Process the form and generate outputs when the "column_process" button is clicked
   observeEvent(ignoreInit = TRUE, input$column_process,{
+    # Check if the first question is filled
     if (is.null(input[["column_questions_1"]]) | input[["column_questions_1"]] == "") {
       return()
     }
@@ -1685,6 +1681,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     res_text <- ""
     DAF <- data.frame()
     gen_info <- data.frame()
+    # Loop through all dynamic fields to collect inputs and process data
     for(i in 1:n) {
         column <- input[[paste0("column_questions_", i)]]
         if (column == "") {
@@ -1703,7 +1700,6 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           pull()
         
         if (length(func) == 0 | !(func %in% c("select_one", "select_multiple"))) {
-          # func <- ifelse(is.perc.func(paste0("data_", table_name, "_DCMPR"), column), "perc", "mean")
           func <- "mean"
         }
         
@@ -1771,8 +1767,8 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     DAF <- DAF %>% distinct()
     
     DAF$ID <- seq_len(nrow(DAF))
-    write.xlsx(DAF, "daf_column.xlsx")
-    write.xlsx(gen_info, "gen_info_column.xlsx")
+    # write.xlsx(DAF, "daf_column.xlsx")
+    # write.xlsx(gen_info, "gen_info_column.xlsx")
     
     json_body <- list(
       daf_file = DAF,
@@ -1786,15 +1782,13 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       )
     )
     
-    write.xlsx(data.frame(
-      TABLE_ID = as.character(),
-      ID = as.character(),
-      variable = as.character(),
-      operation = as.character(),
-      value = as.character()
-    ), "filter.xlsx")
-    
-    url <- Sys.getenv('url')
+    # write.xlsx(data.frame(
+    #   TABLE_ID = as.character(),
+    #   ID = as.character(),
+    #   variable = as.character(),
+    #   operation = as.character(),
+    #   value = as.character()
+    # ), "filter.xlsx")
     
     showModal(
       modalDialog(
@@ -1805,13 +1799,12 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       )
     )
     
+    # Send data to Azure http_trigger to process analysis
+    url <- Sys.getenv('url')
     response <- POST(url, body = json_body, encode = "json")
-    print(status_code(response))
-    
+    # Process output
     char <- rawToChar(response$content)
-    # print(char)
     df <- fromJSON(char)
-
     df_final <- as.data.frame(do.call(cbind,df$result))
 
     # Convert the list to a dataframe
@@ -1824,6 +1817,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
     processed_data(df)
   })
   
+  # Download the processed data as an Excel file
   output$column_excel <- downloadHandler(
     filename = function() {
       paste("data", Sys.Date(), ".xlsx", sep = "")
