@@ -457,17 +457,11 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       projects_numeric <- unique(numeric$TABLE_ID)
       projects_select <- unique(select$TABLE_ID)
       
+      updateSelectizeInput(session, "project", choices = c(""), selected = "")
+      updateSelectizeInput(session, "project_numeric", choices = c(""), selected = "")
+      
       updateSelectizeInput(session, "project", choices = projects_select)
       updateSelectizeInput(session, "project_numeric", choices = projects_numeric)
-      
-      updateSelectizeInput(session, "variable_orig", choices = c(), selected = NULL)
-      updateSelectizeInput(session, "variable_orig_numeric", choices = c(), selected = NULL)
-      
-      updateSelectizeInput(session, "dissagr", choices = c(), selected = NULL)
-      updateSelectizeInput(session, "dissagr_numeric", choices = c(), selected = NULL)
-      
-      updateSelectizeInput(session, "option", choices = c(), selected = NULL)
-      updateSelectizeInput(session, "option_numeric", choices = c(), selected = NULL)
       
       output$map_oblast <- renderLeaflet({NULL})
       output$map_raion <- renderLeaflet({NULL})
@@ -1448,6 +1442,14 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       general_info[is.na(general_info$weight_column_name),]$weight_column_name <- 'empty'
     }
     
+    showModal(
+      modalDialog(
+        title = "Processing",
+        "Sending your request to the processing system.",
+        footer = NULL,
+        easyClose = TRUE
+      )
+    )
 
     filter <- daf %>%
       dplyr::select(ID, TABLE_ID, admin_var) %>%
@@ -1767,6 +1769,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
         ))
     }
     DAF <- DAF %>% distinct()
+    
     DAF$ID <- seq_len(nrow(DAF))
     write.xlsx(DAF, "daf_column.xlsx")
     write.xlsx(gen_info, "gen_info_column.xlsx")
