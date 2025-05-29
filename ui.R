@@ -100,14 +100,27 @@ ui <- fluidPage(
                            h5("Draw a polygon on the map to select the area of interest"),
                            selectizeInput("geo_admin_level", "Select admin level", choices = c("oblast", "raion", "hromada", "settlement"), multiple = FALSE, selected = "oblast"),
                            conditionalPanel(
+                             condition = "input.geo_admin_level == 'hromada' | input.geo_admin_level == 'settlement' | input.geo_admin_level == 'raion' | input.geo_admin_level == 'oblast'",
+                             uiOutput("geo_defined_oblast_ui")
+                           ),
+                           # Conditional panel for raions (shown when raion-level filtering is relevant)
+                           conditionalPanel(
+                             condition = "input.geo_admin_level == 'hromada' | input.geo_admin_level == 'settlement' | input.geo_admin_level == 'raion'",
+                             uiOutput("geo_defined_raion_ui")  # Placeholder for dynamic raion select input
+                           ),
+                           conditionalPanel(
                              condition = "input.geo_admin_level == 'hromada' | input.geo_admin_level == 'settlement'",
-                             selectizeInput("geo_defined_oblast", "Specify oblasts", choices = c("Overall", oblasts$admin1Name_eng), multiple = TRUE, selected = c("Kyivska", "Kyiv city"))
+                             uiOutput("geo_defined_hromada_ui")  # Placeholder for dynamic raion select input
+                           ),
+                           conditionalPanel(
+                             condition = "input.geo_admin_level == 'settlement'",
+                             uiOutput("geo_defined_settlement_ui")  # Placeholder for dynamic raion select input
                            ),
                            h5("Choose the topology relation:\n
                       - 'intersects' - the geometries have at least one point in common
                       - 'covers' -admin geometry is completely inside the drawn polygon"),
                            selectizeInput("geo_relation_type", "Select topology relation", choices = c("intersects", "covers"), multiple = FALSE, selected = "intersects"),
-                           fluidRow(actionButton("geo_reset", "Reset Polygon"),
+                           fluidRow(actionButton("geo_reset", "Reset selection"),
                                     actionButton("geo_get_info", "Get info"),
                                     conditionalPanel(
                                       condition = "output.geo_showGetButton",

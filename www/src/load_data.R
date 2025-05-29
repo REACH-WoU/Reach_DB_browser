@@ -1,5 +1,8 @@
 
 oblasts <- read.xlsx('www/oblast_names.xlsx')
+raions <- read.xlsx('www/raion_names.xlsx')
+hromadas <- read.xlsx('www/hromada_names.xlsx')
+settlements <- read.xlsx('www/settlement_names.xlsx')
 
 time_tbl <- dbGetQuery(my_connection , "
 DECLARE @sql NVARCHAR(MAX);
