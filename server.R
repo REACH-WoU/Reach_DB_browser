@@ -1086,6 +1086,112 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       NULL
     })
   })
+  # Reactive values from selectizers
+  rv <- reactiveValues(selected_oblasts=c(),selected_raions=c(),selected_hromadas=c(),selected_settlements=c(),selected_units = c())
+  rv_pcode <- reactiveValues(selected_oblasts=c(),selected_raions=c(),selected_hromadas=c(),selected_settlements=c())
+  # Reactive selectizer for oblast
+  output$geo_defined_oblast_ui <- renderUI({
+    req(input$geo_admin_level)
+    
+    default_choices <- c("Overall", oblasts$admin1Name_eng)
+    
+    # If no reactive selection has been set yet, apply a default for certain levels
+    selected_vals <- if (length(rv$selected_oblasts) == 0 && input$geo_admin_level %in% c("raion", "hromada", "settlement")) {
+      c("Kyivska")
+    } else {
+      rv$selected_oblasts
+    }
+    selectizeInput("geo_defined_oblast", "Specify oblasts", 
+                   choices = default_choices,
+                   multiple = TRUE,
+                   selected = selected_vals)
+    
+  })
+  
+  # Observe the geo_defined_oblast input, updates the raion selectizer
+  observeEvent(input$geo_defined_oblast, {
+    req(input$geo_defined_oblast)
+    rv$selected_oblasts <- input$geo_defined_oblast
+    rv_pcode$selected_oblasts <- oblasts %>% filter(admin1Name_eng %in% rv$selected_oblasts) %>% pull(admin1Pcode)
+    
+    # Filter raion names by selected oblasts
+    filtered_raions <- data.frame(admin1Pcode = rv_pcode$selected_oblasts) %>%
+      left_join(raions,by = "admin1Pcode") %>%
+      pull(admin2Name_eng) %>%
+      unique() %>%
+      sort()
+    ### Update map
+    if (input$geo_admin_level != "oblast"){
+    admin_map(eval(as.name(paste0(input$geo_admin_level,"_json"))) %>% dplyr::filter(ADM1_PCODE %in% rv_pcode$selected_oblasts))
+    }
+    output$geo_defined_raion_ui <- renderUI({
+      selectizeInput("geo_defined_raion", "Specify raions", 
+                     choices = filtered_raions, 
+                     multiple = TRUE,
+                     selected = rv$selected_raions)
+    })
+  })
+  
+  # Observe the geo_defined_raion input, updates the hromada selectizer
+  observeEvent(input$geo_defined_raion, {
+    req(input$geo_defined_raion)
+    rv$selected_raions <- input$geo_defined_raion
+    rv_pcode$selected_raions <- data.frame(admin1Pcode = rv_pcode$selected_oblasts) %>%
+      left_join(raions,by = "admin1Pcode") %>% filter(admin2Name_eng %in% rv$selected_raions) %>% pull(admin2Pcode)
+    # Filter hromada names by selected raions
+    filtered_hromadas <- data.frame(admin2Pcode = rv_pcode$selected_raions) %>%
+      left_join(hromadas,by = "admin2Pcode") %>%
+      pull(admin3Name_eng) %>%
+      unique() %>%
+      sort()
+    ### Update map
+    if (input$geo_admin_level != "raion"){
+    admin_map(eval(as.name(paste0(input$geo_admin_level,"_json"))) %>% dplyr::filter(ADM2_PCODE %in% rv_pcode$selected_raions))
+    }
+    output$geo_defined_hromada_ui <- renderUI({
+      selectizeInput("geo_defined_hromada", "Specify hromadas", 
+                     choices = filtered_hromadas, 
+                     multiple = TRUE,
+                     selected = rv$selected_hromadas)
+    })
+  })
+  # Observe the geo_defined_hromada input, updates the settlement selectizer
+  observeEvent(input$geo_defined_hromada, {
+    req(input$geo_defined_hromada)
+    rv$selected_hromadas <- input$geo_defined_hromada
+    rv_pcode$selected_hromadas <- data.frame(admin2Pcode = rv_pcode$selected_raions) %>%
+      left_join(hromadas,by = "admin2Pcode") %>% filter(admin3Name_eng %in% rv$selected_hromadas) %>% pull(admin3Pcode)
+    # Filter hromada names by selected raions
+    filtered_settlements <- data.frame(admin3Pcode = rv_pcode$selected_hromadas) %>%
+      left_join(settlements,by = "admin3Pcode") %>%
+      pull(admin4Name_eng) %>%
+      unique() %>%
+      sort()
+    ### Update map
+    if (input$geo_admin_level != "hromada"){
+    admin_map(eval(as.name(paste0(input$geo_admin_level,"_json"))) %>% dplyr::filter(ADM3_PCODE %in% rv_pcode$selected_hromadas))
+    }
+    output$geo_defined_settlement_ui <- renderUI({
+      selectizeInput("geo_defined_settlement", "Specify settlements", 
+                     choices = filtered_settlements, 
+                     multiple = TRUE,
+                     selected = rv$selected_settlements)
+    })
+  })
+  # Observe the geo_defined_settlemet input to get Pcodes
+  observeEvent(input$geo_defined_settlement, {
+    req(input$geo_defined_settlement)
+    rv$selected_settlements <- input$geo_defined_settlement
+    rv_pcode$selected_settlements <- data.frame(admin3Pcode = rv_pcode$selected_hromadas) %>%
+      left_join(settlements,by = "admin3Pcode") %>% filter(admin4Name_eng %in% rv$selected_settlements) %>% pull(admin4Pcode)
+  })
+  # Observe the geo_defined_settlemet input to get Pcodes
+  observeEvent(input[[paste0("geo_defined_",input$geo_admin_level)]], {
+    #req(eval(as.name(paste0("input$geo_defined_",input$geo_admin_level))))
+    rv$selected_units <- input[[paste0("geo_defined_",input$geo_admin_level)]]
+    rv_pcode$selected_units <- rv_pcode[[paste0("selected_", input$geo_admin_level, "s")]]
+  })
+
   # Observe the geo_defined_oblast input, updates the map based on selected oblast
   # plot only needed area, improve time performance
   # related to Geospatial request page
@@ -1095,7 +1201,7 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       return()
     }
     # Handle map updates for hromada and settlement based on the selected oblast
-    if (input$geo_admin_level == "hromada") {
+    if (input$geo_admin_level %in% c("hromada","settlement")) {
       if ("Overall" %in% input$geo_defined_oblast) {
         if (input$geo_admin_level == "hromada") {
           admin_map(hromada_json)
@@ -1197,9 +1303,19 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       NULL
     })
     
+    ### reset selectizer
+    rv[[paste0("selected_",input$geo_admin_level,"s")]] <- c()
+    rv_pcode[[paste0("selected_",input$geo_admin_level,"s")]] <- c()
+    rv$selected_units <- c()
+    rv_pcode$selected_units <- c()
+    updateSelectizeInput(session, paste0("geo_defined_",input[["geo_admin_level"]]),
+                         selected = rv$selected_units)
+
+    
   })
   
   intersections <- reactiveVal()
+  
   # Handle request to get information based on selected points, related to Geospatial request page
   observeEvent(input$geo_get_info, {
     # Handle geometry creation based on the number of points selected
@@ -1225,31 +1341,62 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
       geometry <- st_sfc(st_point(as.matrix(closed_points)), crs = 4326)
     }
     
+    admin_name <- switch(input$geo_admin_level,
+                         "oblast" = "admin1Name_eng",
+                         "raion" = "admin2Name_eng",
+                         "hromada" = "admin3Name_eng",
+                         "settlement" = "admin4Name_eng")
+    admin_pcode <- switch(input$geo_admin_level,
+                          "oblast" = "admin1Pcode",
+                          "raion" = "admin2Pcode",
+                          "hromada" = "admin3Pcode",
+                          "settlement" = "admin4Pcode")
     # Check if geometry is valid and find intersections with the admin map
-    if (st_is_valid(geometry)) {
-      admin_map_planar <- st_transform(admin_map(), 3857)
-      geometry_planar <- st_transform(geometry, 3857)
-      # Find intersections or coverage based on user selection
-      if (input$geo_relation_type == "covers") {
-        intersections_admin <- admin_map()[unlist(st_covers(geometry_planar, admin_map_planar)), ]
-      } else if (input$geo_relation_type == "intersects") {
-        intersections_admin <- admin_map()[unlist(st_intersects(geometry_planar, admin_map_planar)), ]
+    if (exists("geometry")){
+      if (st_is_valid(geometry)) {
+        admin_map_planar <- st_transform(admin_map(), 3857)
+        geometry_planar <- st_transform(geometry, 3857)
+        # Find intersections or coverage based on user selection
+        if (input$geo_relation_type == "covers") {
+          intersections_admin <- admin_map()[unlist(st_covers(geometry_planar, admin_map_planar)), ]
+        } else if (input$geo_relation_type == "intersects") {
+          intersections_admin <- admin_map()[unlist(st_intersects(geometry_planar, admin_map_planar)), ]
+        }
+        # Filter representation data based on intersections
+        admin_column <- switch(input$geo_admin_level,
+                               "oblast" = "ADM1_PCODE",
+                               "raion" = "ADM2_PCODE",
+                               "hromada" = "ADM3_PCODE",
+                               "settlement" = "ADM4_PCODE")
+        intersections(data.frame(
+          "value" = intersections_admin[[admin_column]]
+        ))
+        
       }
-      # Filter representation data based on intersections
-      admin_column <- switch(input$geo_admin_level,
-                             "oblast" = "ADM1_PCODE",
-                             "raion" = "ADM2_PCODE",
-                             "hromada" = "ADM3_PCODE",
-                             "settlement" = "ADM4_PCODE")
       
-      representation_data_filtered <- representation_data %>%
-        dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% intersections_admin[[admin_column]]))) %>%
+      
+      new_values <- eval(as.name(paste0(input$geo_admin_level,"s"))) %>% filter(eval(as.name(admin_pcode)) %in% intersections()$value) %>% pull(eval(as.name(admin_name)))
+        
+      # Combine with current selections and remove duplicates
+      combined <- unique(c(rv$selected_units, new_values))
+      combined_pcodes <- unique(c(rv_pcode$selected_units,intersections()$value))
+      # Update reactive value
+      rv$selected_units <- combined
+      rv_pcode$selected_units <- combined_pcodes
+      selected_pcodes <- combined_pcodes
+      # Update the input in UI
+      updateSelectizeInput(session, paste0("geo_defined_",input$geo_admin_level),
+                           selected = combined)
+      
+    } else {
+      selected_pcodes <- rv_pcode[[paste0("selected_",input$geo_admin_level,"s")]]
+    }
+    representation_data_filtered <- representation_data %>%
+        dplyr::filter(map_lgl(representation_data[[input$geo_admin_level]], ~ any(. %in% selected_pcodes))) %>%
         dplyr::select(c("Name", "Project", "Round", "Type", "Interview_date")) %>%
         dplyr::mutate(Get_info = FALSE)
       
-      intersections(data.frame(
-        "value" = intersections_admin[[admin_column]]
-      ))
+      
       
       # sort representation_data_filtered by Project
       representation_data_filtered <- representation_data_filtered[order(representation_data_filtered$Project),]
@@ -1267,8 +1414,21 @@ WHERE TABLE_NAME in ('",paste0(unique(general_info$main_sheet_name), collapse ="
           hot_col("Round", valign = 'htCenter') %>%
           hot_cols(colWidths = c(310, 160, 110, 160, 160, 100))
       })
-    }
+    
   })
+#  
+#  # Follow the selections on the map and add them to the selectizer
+#  observeEvent(input$geo_defined_oblast, {
+#    rv$selected_oblasts <- input$geo_defined_oblast
+#    rv_pcode$selected_oblasts <- oblasts %>% filter(admin1Name_eng %in% input$geo_defined_oblast) %>% pull(admin1Pcode)
+#  })
+#  observeEvent(input$geo_defined_raions, {
+#    rv$selected_raions <- input$geo_defined_raions
+#    rv_pcode$selected_raions <- data.frame(admin1Pcode = rv_pcode$selected_oblasts) %>%
+#      left_join(raions,by = "admin1Pcode") %>% filter(admin2Name_eng %in% rv$selected_raions) %>% pull(admin2Pcode)
+#  })
+#
+  
   
   # Handle table interactions and updating the geo_table table
   observeEvent(input$geo_table, {
