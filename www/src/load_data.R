@@ -4,24 +4,48 @@ raions <- read.xlsx('www/raion_names.xlsx')
 hromadas <- read.xlsx('www/hromada_names.xlsx')
 settlements <- read.xlsx('www/settlement_names.xlsx')
 
-time_tbl <- dbGetQuery(my_connection , "
-DECLARE @sql NVARCHAR(MAX);
--- Construct the dynamic SQL
-SET @sql = STUFF(
-    (
-        SELECT ' UNION ALL SELECT top 1 ''' + TABLE_ID + ''' as TABLE_ID, [start] AS value FROM [data_' + TABLE_ID + '_' + main_datasheet + '_DCMPR]'
-        FROM data_representative_table
-		where status = 'decompressed' 
-		AND 'data_' + TABLE_ID + '_' + main_datasheet + '_DCMPR' IN (SELECT name FROM sys.tables)
-        FOR XML PATH(''), TYPE
-    ).value('.', 'NVARCHAR(MAX)')
-, 1, 11, '');
+# Step 1: Get TABLE_ID and main_datasheet for decompressed rows
+table_info <- dbGetQuery(my_connection, "
+  SELECT TABLE_ID, main_datasheet
+  FROM data_representative_table
+  WHERE status = 'decompressed'
+")
 
-exec sp_executesql @sql
-") %>% 
-  mutate(value = substr(value,1,10),
-         value = as.Date(value,format="%Y-%m-%d"),
-         value = format(value, "%Y-%m"), Interview_date = value)
+# Step 2: Get all table names in the database
+available_tables <- dbGetQuery(my_connection, "SELECT name FROM sys.tables")$name
+
+# Step 3: Loop over each row to construct table name and query start date
+results <- lapply(1:nrow(table_info), function(i) {
+  tbl_id <- table_info$TABLE_ID[i]
+  sheet  <- table_info$main_datasheet[i]
+  
+  table_name <- paste0("data_", tbl_id, "_", sheet, "_DCMPR")
+  
+  # Check if table exists in the database
+  if (table_name %in% available_tables) {
+    query <- sprintf("SELECT TOP 1 '%s' AS TABLE_ID, [start] FROM [%s]", tbl_id, table_name)
+    res <- tryCatch(dbGetQuery(my_connection, query), error = function(e) NULL)
+    return(res)
+  } else {
+    return(NULL)
+  }
+})
+
+# Step 4: Combine and transform
+time_tbl <- do.call(rbind, results)
+
+if (!is.null(time_tbl) && "start" %in% colnames(time_tbl)) {
+  time_tbl <- time_tbl %>%
+    rename(start_date = "start") %>%
+    mutate(
+      value = substr(start_date, 1, 10),
+      value = as.Date(value, format = "%Y-%m-%d"),
+      Interview_date = format(value, "%Y-%m")
+    )
+} else {
+  warning("No valid start dates found.")
+  print(colnames(time_tbl))
+}
 
 
 database_project <- dbGetQuery(my_connection , "SELECT * from Reach_QDB;")
